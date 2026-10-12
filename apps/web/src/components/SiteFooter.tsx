@@ -66,6 +66,7 @@ export function SiteFooter() {
             </li>
           </ul>
           <p className="mt-6 text-xs text-ivory/50">Near Hyderabad, Telangana. Exact address pending owner confirmation.</p>
+          <p className="mt-2 text-xs text-ivory/40">© {new Date().getFullYear()} V-Farms. Exclusive whole-property stays.</p>
         </div>
       </div>
     </footer>

@@ -4,7 +4,7 @@ export const BRAND = {
   location: "Near Hyderabad, Telangana",
   property: "A private five-acre dragon fruit farm near Hyderabad for exclusive stays and memorable gatherings.",
   roomNotice:
-    "Five distinct rooms. One exclusive estate booking. Every eligible stay includes all five rooms.",
+    "Five distinct rooms. One exclusive estate booking. All five rooms are included in your eligible stay.",
   mediaNote:
     "Photography is taken from the V-Farms resort video. Stills were upscaled and colour-graded for presentation. They are not native 4K footage or genuine HDR.",
 } as const;
@@ -49,51 +49,47 @@ export const GALLERY = [
   { src: "/images/estate/vfarms_4k_hdr_style_12.jpg", alt: "Night aerial of the V-Farms guest building." },
 ] as const;
 
-/**
- * The supplied resort video and graded stills do not show five distinct bedrooms.
- * Confirmed interiors in footage: dining/gathering hall, covered terrace, courtyard, building exteriors.
- * Working titles below are unpublished design directions until the owner approves names and photographs.
- */
+/** Owner-supplied bedroom photographs. Included together in every whole-property stay. */
 export const ROOMS = [
   {
     slug: "room-1",
     name: "Room 1",
     workingTitle: "The Garden Retreat",
     designDirection: "A serene retreat with a light, nature-inspired feel.",
-    photographPublished: false,
-    image: null,
+    photographPublished: true,
+    image: "/images/rooms/room-1.png",
   },
   {
     slug: "room-2",
     name: "Room 2",
     workingTitle: "The Modern Suite",
     designDirection: "Contemporary comfort with clean lines and understated elegance.",
-    photographPublished: false,
-    image: null,
+    photographPublished: true,
+    image: "/images/rooms/room-2.png",
   },
   {
     slug: "room-3",
     name: "Room 3",
     workingTitle: "The Nature Room",
     designDirection: "A fresh, light-filled space inspired by the surrounding landscape.",
-    photographPublished: false,
-    image: null,
+    photographPublished: true,
+    image: "/images/rooms/room-3.png",
   },
   {
     slug: "room-4",
     name: "Room 4",
     workingTitle: "The Warm Luxe Room",
     designDirection: "Warm lighting and thoughtful details create a relaxed, intimate mood.",
-    photographPublished: false,
-    image: null,
+    photographPublished: true,
+    image: "/images/rooms/room-4.png",
   },
   {
     slug: "room-5",
     name: "Room 5",
     workingTitle: "The Signature Room",
     designDirection: "A characterful space with its own distinctive visual identity.",
-    photographPublished: false,
-    image: null,
+    photographPublished: true,
+    image: "/images/rooms/room-5.png",
   },
 ] as const;
 

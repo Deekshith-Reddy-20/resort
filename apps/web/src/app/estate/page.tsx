@@ -1,9 +1,12 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHero } from "@/components/PageHero";
 import { BRAND, GALLERY } from "@/lib/content";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "The Estate" };
+export const metadata = pageMeta(
+  "The Estate",
+  "A private five-acre dragon fruit farm near Hyderabad. One guest building, five rooms, and exclusive whole-property stays and events.",
+);
 
 export default function EstatePage() {
   return (

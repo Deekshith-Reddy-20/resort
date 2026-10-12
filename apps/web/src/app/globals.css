@@ -10,6 +10,13 @@
   --dragon: #d93668;
   --charcoal: #242a25;
   --stone: #d9d2c4;
+  --muted: #5c6560;
+  --radius: 1.25rem;
+  --shadow-soft: 0 24px 60px -28px rgb(9 40 31 / 0.28);
+  --type-display: clamp(2.75rem, 6vw, 5.5rem);
+  --type-h2: clamp(2rem, 3.4vw, 3.15rem);
+  --type-body: 1.0625rem;
+  --measure: 38rem;
 }
 
 html {
@@ -23,7 +30,7 @@ body {
 }
 
 :focus-visible {
-  outline: 2px solid var(--dragon);
+  outline: 2px solid var(--forest);
   outline-offset: 3px;
 }
 
@@ -33,8 +40,8 @@ body {
   top: -4rem;
   z-index: 80;
   border-radius: 999px;
-  background: #d93668;
-  color: white;
+  background: var(--forest);
+  color: var(--ivory);
   padding: 0.5rem 1rem;
 }
 
@@ -46,10 +53,16 @@ body {
   .field {
     @apply mt-1 min-h-11 w-full rounded-xl border border-stone bg-ivory px-3 py-2.5 text-base text-evergreen;
   }
+  .field:focus {
+    @apply border-forest outline-none ring-2 ring-forest/15;
+  }
   .btn {
-    @apply inline-flex min-h-11 items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium transition;
+    @apply inline-flex min-h-11 items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium tracking-wide transition duration-200;
   }
   .btn-primary {
+    @apply btn bg-forest text-ivory hover:bg-evergreen;
+  }
+  .btn-accent {
     @apply btn bg-dragon text-white hover:bg-[#c12f5c];
   }
   .btn-forest {
@@ -57,6 +70,15 @@ body {
   }
   .btn-ghost {
     @apply btn border border-ivory/70 text-ivory hover:bg-ivory/10;
+  }
+  .btn-secondary {
+    @apply btn border border-forest/20 bg-transparent text-forest hover:bg-beige;
+  }
+  .card {
+    @apply overflow-hidden rounded-2xl bg-white;
+  }
+  .measure {
+    max-width: var(--measure);
   }
 }
 

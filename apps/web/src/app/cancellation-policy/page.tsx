@@ -1,8 +1,8 @@
 import { POLICIES } from "@/lib/content";
 import { PageHero } from "@/components/PageHero";
-import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Cancellation policy" };
+export const metadata = pageMeta("Cancellation policy", POLICIES.cancellation.body.slice(0, 155));
 
 export default function CancellationPage() {
   return (

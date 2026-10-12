@@ -41,6 +41,9 @@ export const metadata: Metadata = {
     title: "V-Farms — A singular escape to nature",
     images: ["/images/estate/hero-poster.jpg"],
   },
+  other: {
+    "theme-color": "#09281F",
+  },
 };
 
 const jsonLd = {

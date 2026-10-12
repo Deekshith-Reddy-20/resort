@@ -49,19 +49,19 @@ export function HeroVideo() {
           fetchPriority="high"
         />
       )}
-      <div className="absolute inset-0 bg-gradient-to-r from-evergreen/80 via-evergreen/45 to-evergreen/20" />
-      <div className="absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-evergreen/90 to-transparent" />
-      <div className="relative mx-auto flex min-h-[92vh] max-w-7xl flex-col justify-center px-4 pb-36 pt-28 md:px-6">
+      <div className="absolute inset-0 bg-evergreen/55" />
+      <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-evergreen to-transparent" />
+      <div className="relative mx-auto flex min-h-[88vh] max-w-7xl flex-col justify-center px-4 pb-40 pt-28 md:px-6">
         <p className="text-[11px] uppercase tracking-[0.42em] text-ivory/75">The private estate</p>
         <h1 className="mt-4 font-serif text-6xl leading-none tracking-tight sm:text-7xl md:text-8xl">V-FARMS</h1>
         <p className="mt-4 font-serif text-2xl italic text-ivory/90 md:text-3xl">A singular escape to nature.</p>
         <p className="mt-6 max-w-xl text-base leading-relaxed text-ivory/85 md:text-lg">
-          Discover a private five-acre dragon fruit farm near Hyderabad, designed for peaceful getaways, meaningful time
-          together, and memorable private gatherings.
+          Discover a private countryside retreat surrounded by the natural beauty of a dragon fruit farm, designed for
+          meaningful stays and memorable gatherings.
         </p>
         <p className="mt-5 text-sm text-ivory/70">Near Hyderabad, Telangana · Five acres · Five rooms · Exclusive whole-property stays</p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
-          <Link href="/stays" className="btn-primary">
+          <Link href="/stays" className="btn-accent">
             Plan Your Stay
           </Link>
           <Link href="/estate" className="btn-ghost">
@@ -72,7 +72,9 @@ export function HeroVideo() {
           </Link>
           {mode === "poster" ? (
             <button type="button" className="ml-auto inline-flex items-center gap-2 text-sm text-ivory/80" onClick={() => setMode("video")}>
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-ivory/50">▶</span>
+              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-ivory/50" aria-hidden>
+                ▶
+              </span>
               Watch our film
             </button>
           ) : (

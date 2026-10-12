@@ -1,9 +1,12 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHero } from "@/components/PageHero";
 import { GALLERY } from "@/lib/content";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Experiences" };
+export const metadata = pageMeta(
+  "Experiences",
+  "Time on a working dragon fruit farm near Hyderabad. Guided activities and meals are listed only after the owner confirms they are offered.",
+);
 
 export default function ExperiencesPage() {
   return (

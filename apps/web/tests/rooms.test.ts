@@ -9,9 +9,10 @@ describe("G01 rooms are informational", () => {
     expect(rooms.every((room) => room.notice.includes("exclusive estate booking"))).toBe(true);
   });
 
-  it("does not publish unverified bedroom photographs", () => {
+  it("publishes five distinct owner-supplied bedroom photographs", () => {
     const rooms = publicRooms();
-    expect(rooms.every((room) => room.photographPublished === false)).toBe(true);
-    expect(rooms.every((room) => room.image === null)).toBe(true);
+    expect(rooms.every((room) => room.photographPublished === true)).toBe(true);
+    expect(new Set(rooms.map((room) => room.image)).size).toBe(5);
+    expect(rooms.every((room) => room.image?.startsWith("/images/rooms/"))).toBe(true);
   });
 });

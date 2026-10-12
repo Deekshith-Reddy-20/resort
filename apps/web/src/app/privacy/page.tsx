@@ -1,8 +1,8 @@
 import { POLICIES } from "@/lib/content";
 import { PageHero } from "@/components/PageHero";
-import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Privacy" };
+export const metadata = pageMeta("Privacy", POLICIES.privacy.body.slice(0, 155));
 
 export default function PrivacyPage() {
   return (

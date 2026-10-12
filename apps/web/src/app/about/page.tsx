@@ -1,7 +1,10 @@
-import type { Metadata } from "next";
 import { PageHero } from "@/components/PageHero";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "About" };
+export const metadata = pageMeta(
+  "About",
+  "V-Farms is a private five-acre dragon fruit farm near Hyderabad, reserved as one exclusive property. Rooms are not sold individually.",
+);
 
 export default function AboutPage() {
   return (

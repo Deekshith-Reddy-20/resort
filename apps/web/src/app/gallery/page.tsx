@@ -1,9 +1,12 @@
-import type { Metadata } from "next";
 import { GalleryLightbox } from "@/components/GalleryLightbox";
 import { PageHero } from "@/components/PageHero";
 import { BRAND, GALLERY } from "@/lib/content";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Gallery" };
+export const metadata = pageMeta(
+  "Gallery",
+  "Photographs of V-Farms taken from the estate film. Stills were upscaled for presentation and are not native 4K or genuine HDR.",
+);
 
 export default function GalleryPage() {
   return (

@@ -1,8 +1,8 @@
 import { POLICIES } from "@/lib/content";
 import { PageHero } from "@/components/PageHero";
-import type { Metadata } from "next";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "Terms of stay" };
+export const metadata = pageMeta("Terms of stay", POLICIES.terms.body.slice(0, 155));
 
 export default function TermsPage() {
   return (

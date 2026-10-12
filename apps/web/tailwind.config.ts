@@ -12,6 +12,7 @@ const config: Config = {
         dragon: "#D93668",
         charcoal: "#242A25",
         stone: "#D9D2C4",
+        muted: "#5C6560",
       },
       fontFamily: {
         serif: ["var(--font-serif)", "Georgia", "serif"],

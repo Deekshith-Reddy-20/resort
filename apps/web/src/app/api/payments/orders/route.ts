@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { error, json, readJson } from "@/lib/http";
 import { createRazorpayOrder, razorpayConfigured } from "@/lib/payments";
-import { attachOrder, db } from "@/lib/store";
+import { attachOrder, preparePayment } from "@/lib/store";
 
 const schema = z.object({
   stayReference: z.string().optional(),
@@ -17,43 +17,46 @@ export async function POST(req: Request) {
   if (!razorpayConfigured()) {
     return error("Payments are not configured. Razorpay test credentials are required.", 503, "PAYMENTS_NOT_CONFIGURED");
   }
-  let amountMinor = 0;
-  let receipt = "";
-  if (parsed.data.stayReference) {
-    const stay = db().stays.find((s) => s.reference === parsed.data.stayReference);
-    if (!stay) return error("Hold not found.", 404);
-    const due = stay.priceSnapshot.dueNowMinor;
-    if (typeof due !== "number") return error("This stay has no payable amount.", 409);
-    amountMinor = due;
-    receipt = stay.reference;
-  } else if (parsed.data.quoteReference) {
-    const quote = db().quotes.find((q) => q.reference === parsed.data.quoteReference);
-    if (!quote || quote.status !== "accepted") return error("Quote must be accepted before payment.", 409);
-    amountMinor = quote.dueNowMinor;
-    receipt = quote.reference;
+  const prepared = preparePayment(parsed.data);
+  if (!prepared.ok) {
+    return error(prepared.error, prepared.status, "code" in prepared ? prepared.code : undefined);
+  }
+  if (prepared.existingOrderId) {
+    return json({
+      orderId: prepared.existingOrderId,
+      amount: prepared.amountMinor,
+      currency: prepared.currency,
+      keyId: process.env.RAZORPAY_KEY_ID,
+      receipt: prepared.reference,
+      reused: true,
+    });
   }
   try {
     const order = await createRazorpayOrder({
-      amountMinor,
-      currency: "INR",
-      receipt,
+      amountMinor: prepared.amountMinor,
+      currency: prepared.currency,
+      receipt: prepared.reference,
       notes: {
         stayReference: parsed.data.stayReference ?? "",
         quoteReference: parsed.data.quoteReference ?? "",
       },
     });
+    if (order.amount !== prepared.amountMinor || order.currency !== prepared.currency) {
+      return error("Razorpay returned an amount that does not match the server quote.", 502, "AMOUNT_MISMATCH");
+    }
     await attachOrder({
       stayReference: parsed.data.stayReference,
       quoteReference: parsed.data.quoteReference,
       orderId: order.id,
-      amountMinor,
+      amountMinor: prepared.amountMinor,
     });
     return json({
       orderId: order.id,
       amount: order.amount,
       currency: order.currency,
       keyId: process.env.RAZORPAY_KEY_ID,
-      receipt,
+      receipt: prepared.reference,
+      reused: false,
     });
   } catch {
     return error("Could not create a payment order.", 502, "RAZORPAY_ORDER_FAILED");

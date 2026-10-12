@@ -11,8 +11,9 @@ test("homepage loads cinematic brand and no room checkout", async ({ page }) => 
 test("room pages are informational", async ({ page }) => {
   await page.goto("/rooms/room-1");
   await expect(page.getByText("There is no individual room price")).toBeVisible();
-  await expect(page.getByText("Photograph unpublished", { exact: true })).toBeVisible();
-  await expect(page.getByRole("link", { name: "Book the entire estate" })).toBeVisible();
+  await expect(page.getByRole("img", { name: /Room 1/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Book the entire estate" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Book this room" })).toHaveCount(0);
 });
 
 test("gallery uses approved frames only", async ({ page }) => {

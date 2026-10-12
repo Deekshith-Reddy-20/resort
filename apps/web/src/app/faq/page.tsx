@@ -1,8 +1,11 @@
-import type { Metadata } from "next";
 import { FaqAccordion } from "@/components/FaqAccordion";
 import { PageHero } from "@/components/PageHero";
+import { pageMeta } from "@/lib/seo";
 
-export const metadata: Metadata = { title: "FAQ" };
+export const metadata = pageMeta(
+  "FAQ",
+  "Answers about exclusive whole-property stays, rooms, events, and unpublished rates at V-Farms near Hyderabad.",
+);
 
 export default function FaqPage() {
   return (

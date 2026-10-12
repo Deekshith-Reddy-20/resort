@@ -6,6 +6,7 @@ import {
   type RatePlan,
 } from "@vfarms/inventory";
 import { withLock } from "./mutex";
+import { emptyCommercial, stayConfigGaps, type CommercialSettings } from "./commercial";
 import { BRAND, FAQS, GALLERY, POLICIES, ROOMS } from "./content";
 
 export type StayStatus =
@@ -130,16 +131,10 @@ interface Db {
     { image: string | null; photographPublished: boolean; publishedSummary?: string; publishedName?: string }
   >;
   settings: {
-    bookingEnabled: boolean;
-    ratesPublished: boolean;
-    holdMinutes: number;
-    maxGuests: number | null;
-    weekdayMinor: number | null;
-    weekendMinor: number | null;
-    taxBps: number | null;
-    depositBps: number | null;
-    minNights: number | null;
-    maxNights: number | null;
+    draft: CommercialSettings;
+    published: CommercialSettings | null;
+    live: boolean;
+    publishedAt: string | null;
   };
 }
 
@@ -161,22 +156,19 @@ function emptyDb(): Db {
     staff: [],
     roomOverrides: {},
     settings: {
-      bookingEnabled: process.env.BOOKING_ENABLED === "true",
-      ratesPublished: false,
-      holdMinutes: Number(process.env.HOLD_MINUTES ?? 15),
-      maxGuests: null,
-      weekdayMinor: null,
-      weekendMinor: null,
-      taxBps: null,
-      depositBps: null,
-      minNights: null,
-      maxNights: null,
+      draft: emptyCommercial(),
+      published: null,
+      live: false,
+      publishedAt: null,
     },
   };
 }
 
 export function db(): Db {
-  if (!globalStore.__vfarmsDb) globalStore.__vfarmsDb = emptyDb();
+  if (!globalStore.__vfarmsDb) {
+    globalStore.__vfarmsDb = emptyDb();
+    bootstrapCommercialFromEnv(globalStore.__vfarmsDb);
+  }
   return globalStore.__vfarmsDb;
 }
 
@@ -204,7 +196,23 @@ function audit(action: string, entity: string, entityId: string, actor?: string)
   db().audit.push({ at: nowIso(), action, entity, entityId, actor });
 }
 
+function purgeExpiredInventory() {
+  const now = Date.parse(nowIso());
+  for (const hold of db().holds) {
+    if (Date.parse(hold.expiresAt) > now) continue;
+    if (hold.stayId) {
+      const stay = db().stays.find((s) => s.id === hold.stayId);
+      if (stay && (stay.status === "held" || stay.status === "awaiting_payment")) {
+        stay.status = "expired";
+        stay.updatedAt = nowIso();
+      }
+    }
+  }
+  db().holds = db().holds.filter((h) => Date.parse(h.expiresAt) > now);
+}
+
 function snapshot() {
+  purgeExpiredInventory();
   const d = db();
   const now = nowIso();
   return {
@@ -247,35 +255,54 @@ function snapshot() {
   };
 }
 
-function ratePlan(): RatePlan {
+function liveCommercial(): CommercialSettings | null {
   const s = db().settings;
+  if (!s.live || !s.published) return null;
+  return s.published;
+}
+
+function ratePlan(): RatePlan {
+  const live = liveCommercial();
   return {
     currency: "INR",
-    weekdayMinor: s.weekdayMinor,
-    weekendMinor: s.weekendMinor,
-    published: s.ratesPublished,
-    minNights: s.minNights,
-    maxNights: s.maxNights,
-    maxGuests: s.maxGuests,
-    taxBps: s.taxBps,
-    depositBps: s.depositBps,
+    weekdayMinor: live?.weekdayMinor ?? null,
+    weekendMinor: live?.weekendMinor ?? null,
+    published: Boolean(live),
+    minNights: live?.minNights ?? null,
+    maxNights: live?.maxNights ?? null,
+    maxGuests: live?.maxGuests ?? null,
+    taxBps: live?.taxBps ?? null,
+    depositBps: live?.depositBps ?? null,
     weekendWeekdays: [0, 6],
   };
 }
 
+export function bookingBlockers(): string[] {
+  const live = liveCommercial();
+  if (!live) return stayConfigGaps(db().settings.draft).length
+    ? ["Online stay booking is not published.", ...stayConfigGaps(db().settings.draft)]
+    : ["Online stay booking is not published. Save a complete draft, then publish."];
+  return [];
+}
+
 export function publicConfig() {
-  const s = db().settings;
+  const live = liveCommercial();
+  const missingSettings = bookingBlockers();
   return {
     brand: BRAND,
     timezone: "Asia/Kolkata",
     currency: "INR",
-    bookingEnabled: s.bookingEnabled && s.ratesPublished,
-    ratesPublished: s.ratesPublished,
+    bookingEnabled: Boolean(live),
+    ratesPublished: Boolean(live),
     paymentsConfigured: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
     emailConfigured: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
-    maxGuests: s.maxGuests,
-    checkInTime: null,
-    checkOutTime: null,
+    maxGuests: live?.maxGuests ?? null,
+    minNights: live?.minNights ?? null,
+    maxNights: live?.maxNights ?? null,
+    checkInTime: live?.checkInTime ?? null,
+    checkOutTime: live?.checkOutTime ?? null,
+    cancellationSummary: live?.cancellationSummary ?? null,
+    missingSettings,
     location: BRAND.location,
     razorpayKeyId: process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_LIVE_MODE !== "true" ? process.env.RAZORPAY_KEY_ID : process.env.RAZORPAY_KEY_ID ?? null,
     mediaNote: BRAND.mediaNote,
@@ -306,14 +333,15 @@ export function publicProperty() {
 export function publicRooms() {
   return ROOMS.map((room) => {
     const override = db().roomOverrides[room.slug];
-    const photographPublished = Boolean(override?.photographPublished && override.image);
+    const image = override?.image !== undefined ? override.image : room.image;
+    const photographPublished = Boolean((override?.photographPublished ?? room.photographPublished) && image);
     return {
       slug: room.slug,
       name: override?.publishedName ?? room.name,
       workingTitle: room.workingTitle,
       designDirection: room.designDirection,
       photographPublished,
-      image: photographPublished ? override!.image : null,
+      image: photographPublished ? image : null,
       publishedSummary: photographPublished ? override?.publishedSummary : undefined,
       bookable: false,
       summary: photographPublished
@@ -359,7 +387,14 @@ export function publicFaqs() {
 }
 
 export function publicPolicies() {
-  return POLICIES;
+  const live = liveCommercial();
+  return {
+    ...POLICIES,
+    cancellation: {
+      title: POLICIES.cancellation.title,
+      body: live?.cancellationSummary ?? POLICIES.cancellation.body,
+    },
+  };
 }
 
 export async function searchAvailability(input: {
@@ -380,7 +415,7 @@ export async function searchAvailability(input: {
       available: result.ok,
       reason: result.ok ? undefined : result.message,
       guests: input.guests ?? null,
-      capacityConfigured: db().settings.maxGuests != null,
+      capacityConfigured: liveCommercial()?.maxGuests != null,
     };
   });
 }
@@ -392,17 +427,39 @@ export async function createStayQuote(input: { checkIn: string; checkOut: string
     endDate: input.checkOut,
     guests: input.guests,
   });
+  const live = liveCommercial();
   const quote = quoteStay({
     checkIn: input.checkIn,
     checkOut: input.checkOut,
     guests: input.guests,
     ratePlan: ratePlan(),
-    bookingEnabled: db().settings.bookingEnabled,
+    exceptions: live?.seasonal,
+    bookingEnabled: Boolean(live),
   });
+  const missingSettings = bookingBlockers();
+  const available = availability.available && quote.available !== false;
+  let blockCode: "none" | "unpublished" | "unavailable" | "capacity" | "stay_rules" = "none";
+  let blockMessage: string | null = null;
+  if (missingSettings.length) {
+    blockCode = "unpublished";
+    blockMessage = missingSettings[0] ?? "Whole-property stay settings are not published.";
+  } else if (!availability.available) {
+    blockCode = "unavailable";
+    blockMessage = availability.reason ?? "The property is unavailable for the selected dates.";
+  } else if (!quote.available) {
+    const capacity = /capacity/i.test(quote.reason ?? "");
+    blockCode = capacity ? "capacity" : "stay_rules";
+    blockMessage = quote.reason ?? "Those dates cannot be reserved.";
+  }
   return {
     ...quote,
-    available: availability.available && quote.available !== false,
+    available,
     availabilityReason: availability.reason,
+    missingSettings,
+    blockCode,
+    blockMessage,
+    checkInTime: live?.checkInTime ?? null,
+    checkOutTime: live?.checkOutTime ?? null,
   };
 }
 
@@ -420,12 +477,14 @@ export async function createStayHold(input: {
     if (!input.acceptPolicies) {
       return { ok: false as const, error: "Policies must be accepted." };
     }
+    const live = liveCommercial();
     const quote = quoteStay({
       checkIn: input.checkIn,
       checkOut: input.checkOut,
       guests: input.guests,
       ratePlan: ratePlan(),
-      bookingEnabled: db().settings.bookingEnabled,
+      exceptions: live?.seasonal,
+      bookingEnabled: Boolean(live),
     });
     const alloc = canAllocate(
       { kind: "stay", startDate: input.checkIn, endDate: input.checkOut },
@@ -433,12 +492,16 @@ export async function createStayHold(input: {
       PROPERTY_ID,
     );
     if (!alloc.ok) return { ok: false as const, error: alloc.message };
-    if (!quote.bookingEnabled || quote.totalMinor == null) {
+    const missingSettings = bookingBlockers();
+    if (!live || missingSettings.length > 0) {
       return {
         ok: false as const,
-        error:
-          "Online stay booking is disabled until the owner publishes rates, taxes, capacity, and policies.",
+        error: missingSettings[0] ?? "Whole-property stay settings are not published.",
+        missingSettings,
       };
+    }
+    if (!quote.available || quote.totalMinor == null) {
+      return { ok: false as const, error: quote.reason ?? "Those dates cannot be reserved." };
     }
     const customer: Customer = {
       id: crypto.randomUUID(),
@@ -447,7 +510,7 @@ export async function createStayHold(input: {
       phone: input.phone,
     };
     db().customers.push(customer);
-    const holdMinutes = db().settings.holdMinutes;
+    const holdMinutes = live.holdMinutes;
     const expires = new Date(Date.now() + holdMinutes * 60_000).toISOString();
     const booking: StayBooking = {
       id: crypto.randomUUID(),
@@ -459,7 +522,16 @@ export async function createStayHold(input: {
       customerId: customer.id,
       specialRequests: input.specialRequests,
       priceSnapshot: quote.snapshot,
-      policySnapshot: { version: "unpublished", accepted: true },
+      policySnapshot: {
+        version: db().settings.publishedAt,
+        accepted: true,
+        cancellationSummary: live.cancellationSummary,
+        checkInTime: live.checkInTime,
+        checkOutTime: live.checkOutTime,
+        terms: "/terms",
+        privacy: "/privacy",
+        cancellation: "/cancellation-policy",
+      },
       verificationHash: verificationHash(input.email, input.phone),
       holdExpiresAt: expires,
       createdAt: nowIso(),
@@ -485,13 +557,27 @@ export async function createStayHold(input: {
 }
 
 function publicStay(booking: StayBooking, customer: Customer, includePii: boolean) {
+  const snap = booking.priceSnapshot as {
+    totalMinor?: number;
+    dueNowMinor?: number;
+    subtotalMinor?: number;
+    taxMinor?: number;
+    nightly?: { date: string; amountMinor: number; kind?: string }[];
+    lines?: { label: string; amountMinor: number }[];
+  };
+  const nights = Array.isArray(snap.nightly) ? snap.nightly.length : 0;
   return {
     reference: booking.reference,
     status: booking.status,
     checkIn: booking.checkIn,
     checkOut: booking.checkOut,
     guests: booking.guests,
+    nights,
+    wholeProperty: true,
     amount: booking.priceSnapshot,
+    policies: booking.policySnapshot,
+    paymentStatus: db().payments.find((p) => p.stayReference === booking.reference)?.status ?? "none",
+    paymentsConfigured: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
     holdExpiresAt: booking.holdExpiresAt,
     guest: includePii
       ? { name: customer.fullName, email: customer.email, phone: customer.phone }
@@ -620,7 +706,7 @@ export async function acceptQuote(quoteReference: string, email: string, phone: 
     if (!alloc.ok) {
       return { ok: false as const, error: alloc.message ?? "Dates are no longer available." };
     }
-    const expires = new Date(Date.now() + db().settings.holdMinutes * 60_000).toISOString();
+    const expires = new Date(Date.now() + (liveCommercial()?.holdMinutes ?? 15) * 60_000).toISOString();
     const holdId = crypto.randomUUID();
     db().holds.push({
       id: holdId,
@@ -638,6 +724,86 @@ export async function acceptQuote(quoteReference: string, email: string, phone: 
     audit("quote.accept", "event_quote", quote.reference);
     return { ok: true as const, quote, holdExpiresAt: expires };
   });
+}
+
+export function preparePayment(args: { stayReference?: string; quoteReference?: string }) {
+  purgeExpiredInventory();
+  if (args.stayReference) {
+    const stay = db().stays.find((s) => s.reference === args.stayReference);
+    if (!stay) return { ok: false as const, error: "Hold not found.", status: 404 as const };
+    if (stay.status === "confirmed") {
+      return { ok: false as const, error: "This reservation is already confirmed.", status: 409 as const };
+    }
+    if (stay.status === "cancelled" || stay.status === "expired") {
+      return { ok: false as const, error: "This reservation is no longer payable.", status: 409 as const };
+    }
+    if (stay.status === "paid_unbooked") {
+      return {
+        ok: false as const,
+        error: "Payment was captured without inventory. Staff must review this exception.",
+        status: 409 as const,
+      };
+    }
+    const hold = db().holds.find((h) => h.stayId === stay.id);
+    if (!hold || Date.parse(hold.expiresAt) <= Date.now()) {
+      return {
+        ok: false as const,
+        error: "This reservation hold has expired. Start a new stay search.",
+        status: 409 as const,
+        code: "HOLD_EXPIRED",
+      };
+    }
+    const due = stay.priceSnapshot.dueNowMinor;
+    if (typeof due !== "number" || due < 1) {
+      return { ok: false as const, error: "This stay has no payable amount.", status: 409 as const };
+    }
+    const existing = db().payments.find(
+      (p) => p.stayReference === stay.reference && p.status === "pending" && p.amountMinor === due && p.orderId,
+    );
+    return {
+      ok: true as const,
+      kind: "stay" as const,
+      reference: stay.reference,
+      amountMinor: due,
+      currency: "INR" as const,
+      existingOrderId: existing?.orderId ?? null,
+    };
+  }
+  if (args.quoteReference) {
+    const quote = db().quotes.find((q) => q.reference === args.quoteReference);
+    if (!quote || quote.status !== "accepted") {
+      return { ok: false as const, error: "Quote must be accepted before payment.", status: 409 as const };
+    }
+    const hold = db().holds.find((h) => h.quoteId === quote.id);
+    if (!hold || Date.parse(hold.expiresAt) <= Date.now()) {
+      return { ok: false as const, error: "The event hold has expired.", status: 409 as const, code: "HOLD_EXPIRED" };
+    }
+    if (quote.dueNowMinor < 1) {
+      return { ok: false as const, error: "This quote has no payable amount.", status: 409 as const };
+    }
+    const existing = db().payments.find(
+      (p) => p.quoteReference === quote.reference && p.status === "pending" && p.amountMinor === quote.dueNowMinor && p.orderId,
+    );
+    return {
+      ok: true as const,
+      kind: "event" as const,
+      reference: quote.reference,
+      amountMinor: quote.dueNowMinor,
+      currency: "INR" as const,
+      existingOrderId: existing?.orderId ?? null,
+    };
+  }
+  return { ok: false as const, error: "A stay or quote reference is required.", status: 400 as const };
+}
+
+export function markPaymentFailed(orderId: string, paymentId?: string) {
+  const payment = db().payments.find((p) => p.orderId === orderId);
+  if (!payment) return { ok: false as const };
+  if (payment.status === "captured") return { ok: true as const, ignored: true };
+  payment.status = "failed";
+  if (paymentId) payment.paymentId = paymentId;
+  audit("payment.failed", "payment", orderId);
+  return { ok: true as const };
 }
 
 export async function attachOrder(args: { stayReference?: string; quoteReference?: string; orderId: string; amountMinor: number }) {
@@ -773,7 +939,7 @@ export function adminOverview() {
     quotes: d.quotes.length,
     exceptions: d.exceptions.length,
     contacts: d.contacts.length,
-    bookingEnabled: d.settings.bookingEnabled && d.settings.ratesPublished,
+    bookingEnabled: Boolean(d.settings.live && d.settings.published),
     calendar: [
       ...d.stays.map((s) => ({ type: "stay", reference: s.reference, status: s.status, start: s.checkIn, end: s.checkOut })),
       ...d.events
@@ -793,10 +959,74 @@ export function adminOverview() {
   };
 }
 
-export function updateSettings(patch: Partial<Db["settings"]>, actor?: string) {
-  Object.assign(db().settings, patch);
-  audit("settings.update", "settings", "property", actor);
-  return db().settings;
+export function commercialState() {
+  return {
+    draft: db().settings.draft,
+    published: db().settings.published,
+    live: db().settings.live,
+    publishedAt: db().settings.publishedAt,
+    draftGaps: stayConfigGaps(db().settings.draft),
+    liveBlockers: bookingBlockers(),
+  };
+}
+
+export function updateDraftSettings(patch: Partial<CommercialSettings>, actor?: string) {
+  db().settings.draft = { ...db().settings.draft, ...patch };
+  audit("settings.draft", "settings", "property", actor);
+  return commercialState();
+}
+
+export function publishStayConfig(actor?: string) {
+  const gaps = stayConfigGaps(db().settings.draft);
+  if (gaps.length) {
+    return { ok: false as const, error: "Cannot publish until every required stay setting is valid.", missingSettings: gaps };
+  }
+  db().settings.published = structuredClone(db().settings.draft);
+  db().settings.live = true;
+  db().settings.publishedAt = nowIso();
+  audit("settings.publish", "settings", "property", actor);
+  return { ok: true as const, ...commercialState() };
+}
+
+export function unpublishStayConfig(actor?: string) {
+  db().settings.live = false;
+  audit("settings.unpublish", "settings", "property", actor);
+  return commercialState();
+}
+
+function envInt(name: string): number | null {
+  const raw = process.env[name];
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function bootstrapCommercialFromEnv(target: Db) {
+  if (process.env.VITEST || process.env.NODE_ENV === "test") return;
+  if (process.env.DEV_STAY_CONFIG_PUBLISH !== "true") return;
+  const weekday = envInt("DEV_WEEKDAY_MINOR") ?? (envInt("DEV_WEEKDAY_INR") != null ? envInt("DEV_WEEKDAY_INR")! * 100 : null);
+  const weekend = envInt("DEV_WEEKEND_MINOR") ?? (envInt("DEV_WEEKEND_INR") != null ? envInt("DEV_WEEKEND_INR")! * 100 : null);
+  target.settings.draft = {
+    ...emptyCommercial(),
+    weekdayMinor: weekday,
+    weekendMinor: weekend,
+    taxBps: envInt("DEV_TAX_BPS"),
+    depositBps: envInt("DEV_DEPOSIT_BPS"),
+    maxGuests: envInt("DEV_MAX_GUESTS"),
+    minNights: envInt("DEV_MIN_NIGHTS"),
+    maxNights: envInt("DEV_MAX_NIGHTS"),
+    checkInTime: process.env.DEV_CHECK_IN || null,
+    checkOutTime: process.env.DEV_CHECK_OUT || null,
+    cancellationSummary: process.env.DEV_CANCELLATION || null,
+    termsConfirmed: process.env.DEV_TERMS_CONFIRMED === "true",
+    privacyConfirmed: process.env.DEV_PRIVACY_CONFIRMED === "true",
+    holdMinutes: envInt("HOLD_MINUTES") ?? 15,
+  };
+  const gaps = stayConfigGaps(target.settings.draft);
+  if (gaps.length) return;
+  target.settings.published = structuredClone(target.settings.draft);
+  target.settings.live = true;
+  target.settings.publishedAt = nowIso();
 }
 
 export function addMaintenance(startDate: string, endDate: string, reason: string, actor?: string) {

@@ -20,8 +20,12 @@ export function GalleryLightbox({ items, preview = items.length }: { items: read
       if (e.key === "ArrowRight") next();
       if (e.key === "ArrowLeft") prev();
     };
+    document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = "";
+      window.removeEventListener("keydown", onKey);
+    };
   }, [open, close, next, prev]);
 
   return (

@@ -85,6 +85,7 @@ export function quoteStay(args: {
   if (args.ratePlan.maxGuests != null && args.guests > args.ratePlan.maxGuests) {
     return {
       ...empty,
+      bookingEnabled: true,
       available: false,
       reason: "Guest count exceeds the configured property capacity.",
     };
@@ -93,6 +94,7 @@ export function quoteStay(args: {
   if (args.ratePlan.minNights != null && nights.length < args.ratePlan.minNights) {
     return {
       ...empty,
+      bookingEnabled: true,
       available: false,
       reason: `Minimum stay is ${args.ratePlan.minNights} night(s).`,
     };
@@ -101,6 +103,7 @@ export function quoteStay(args: {
   if (args.ratePlan.maxNights != null && nights.length > args.ratePlan.maxNights) {
     return {
       ...empty,
+      bookingEnabled: true,
       available: false,
       reason: `Maximum stay is ${args.ratePlan.maxNights} night(s).`,
     };
@@ -158,6 +161,9 @@ export function quoteStay(args: {
       checkOut: args.checkOut,
       guests: args.guests,
       nightly,
+      lines,
+      subtotalMinor,
+      taxMinor,
       taxBps: args.ratePlan.taxBps,
       depositBps: args.ratePlan.depositBps,
       totalMinor,

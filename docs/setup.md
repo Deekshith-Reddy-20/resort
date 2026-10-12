@@ -50,6 +50,22 @@ Do not use these values in production. Create staff in Supabase Auth instead.
 
 The app talks to `http://10.0.2.2:3000/` on the emulator. No Razorpay or Supabase secrets are packaged in the APK.
 
+## Razorpay (test mode)
+
+Set these **server-only** variables in `apps/web/.env.local`. Never use a `NEXT_PUBLIC_` prefix for the secret.
+
+```
+RAZORPAY_KEY_ID=rzp_test_...
+RAZORPAY_KEY_SECRET=...
+RAZORPAY_WEBHOOK_SECRET=...
+RAZORPAY_LIVE_MODE=false
+```
+
+Webhook URL in the Razorpay dashboard: `https://YOUR_HOST/api/payments/webhooks/razorpay`  
+Localhost cannot receive Razorpay webhooks unless you expose it (for example with a tunnel). Local confirmation uses checkout signature verification via `POST /api/payments/verify`.
+
+Test cards: use Razorpay’s documented test cards. A Checkout success animation is not a confirmed stay until `/api/payments/verify` or a signed webhook returns `confirmed`.
+
 ## Supabase
 
 Apply `supabase/migrations/20261012120000_vfarms_core.sql` to a project, then set `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY` (server only). Database policy SQL tests are in `supabase/tests/inventory_policy.sql` and are **NOT TESTED** until a database exists.

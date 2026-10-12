@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { readStayDraft, writeStayDraft } from "@/lib/search-draft";
 
 type Quote = {
   available: boolean;
@@ -12,6 +13,9 @@ type Quote = {
   totalMinor: number | null;
   dueNowMinor: number | null;
   lines: { label: string; amountMinor: number }[];
+  missingSettings?: string[];
+  blockCode?: string;
+  blockMessage?: string | null;
 };
 
 function todayISO() {
@@ -34,8 +38,16 @@ export function StaySearch({ embedded = false }: { embedded?: boolean }) {
   const [loading, setLoading] = useState(false);
   const [quote, setQuote] = useState<Quote | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ready, setReady] = useState(false);
 
   useEffect(() => {
+    const draft = readStayDraft();
+    if (draft.checkIn) setCheckIn(draft.checkIn);
+    if (draft.checkOut) setCheckOut(draft.checkOut);
+    if (typeof draft.guests === "number" && draft.guests > 0) setGuests(draft.guests);
+    if (draft.eventType) setEventType(draft.eventType);
+    if (draft.attendees) setAttendees(draft.attendees);
+    setReady(true);
     fetch("/api/public/config")
       .then((r) => r.json())
       .then((cfg) => {
@@ -43,6 +55,11 @@ export function StaySearch({ embedded = false }: { embedded?: boolean }) {
       })
       .catch(() => undefined);
   }, []);
+
+  useEffect(() => {
+    if (!ready) return;
+    writeStayDraft({ checkIn, checkOut, guests, eventType, attendees });
+  }, [ready, checkIn, checkOut, guests, eventType, attendees]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -112,7 +129,8 @@ export function StaySearch({ embedded = false }: { embedded?: boolean }) {
       <div className="mb-4 grid grid-cols-2 gap-2 rounded-2xl bg-ivory p-1 text-sm">
         <button
           type="button"
-          className={`rounded-xl px-3 py-2 ${mode === "stay" ? "bg-white font-medium text-dragon shadow-sm" : "text-forest/60"}`}
+          aria-pressed={mode === "stay"}
+          className={`rounded-xl px-3 py-2 ${mode === "stay" ? "bg-white font-medium text-forest shadow-sm" : "text-muted"}`}
           onClick={() => {
             setMode("stay");
             setQuote(null);
@@ -123,7 +141,8 @@ export function StaySearch({ embedded = false }: { embedded?: boolean }) {
         </button>
         <button
           type="button"
-          className={`rounded-xl px-3 py-2 ${mode === "event" ? "bg-white font-medium text-forest shadow-sm" : "text-forest/60"}`}
+          aria-pressed={mode === "event"}
+          className={`rounded-xl px-3 py-2 ${mode === "event" ? "bg-white font-medium text-forest shadow-sm" : "text-muted"}`}
           onClick={() => {
             setMode("event");
             setQuote(null);
@@ -187,6 +206,14 @@ export function StaySearch({ embedded = false }: { embedded?: boolean }) {
             <p className="font-medium text-forest">
               {quote.available ? (mode === "stay" ? "The estate is available for those dates." : "Those dates are currently free of confirmed stays, events, and closures.") : quote.availabilityReason ?? "Those dates are unavailable."}
             </p>
+            {quote.blockMessage ? <p className="mt-2 text-forest/80">{quote.blockMessage}</p> : null}
+            {quote.missingSettings && quote.missingSettings.length > 0 ? (
+              <ul className="mt-2 list-disc pl-5 text-forest/80">
+                {quote.missingSettings.map((item) => (
+                  <li key={item}>{item}</li>
+                ))}
+              </ul>
+            ) : null}
             {quote.totalMinor == null ? <p className="mt-2 text-forest/70">{quote.reason}</p> : (
               <ul className="mt-2 space-y-1">
                 {quote.lines.map((line) => (

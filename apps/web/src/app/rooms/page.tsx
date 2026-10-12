@@ -1,13 +1,16 @@
-import type { Metadata } from "next";
 import Link from "next/link";
 import { PageHero } from "@/components/PageHero";
 import { RoomShowcase } from "@/components/RoomShowcase";
 import { BRAND } from "@/lib/content";
+import { pageMeta } from "@/lib/seo";
 import { publicRooms } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
-export const metadata: Metadata = { title: "Rooms" };
+export const metadata = pageMeta(
+  "Rooms",
+  "Five distinct rooms at V-Farms. One exclusive estate booking. All five rooms are included in an eligible overnight stay.",
+);
 
 export default function RoomsPage() {
   return (
@@ -15,9 +18,9 @@ export default function RoomsPage() {
       <PageHero
         kicker="Stay"
         title="Five distinct rooms"
-        body={`${BRAND.roomNotice} Names below are working titles only. Bedroom photographs are unpublished until the owner approves them.`}
+        body={`${BRAND.roomNotice} All five rooms are included in your eligible stay. Photographs below are owner-supplied interiors. Individual rooms cannot be booked.`}
       />
-      <section className="mx-auto max-w-7xl px-4 py-16">
+      <section className="mx-auto max-w-7xl px-4 py-16 md:px-6">
         <RoomShowcase rooms={publicRooms()} />
         <Link href="/stays" className="btn-primary mt-10">
           Book the entire estate

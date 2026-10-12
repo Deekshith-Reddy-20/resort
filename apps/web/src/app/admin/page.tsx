@@ -120,7 +120,7 @@ export default function AdminPage() {
             <div>Confirmed: {overview.confirmedStays}</div>
             <div>Enquiries: {overview.enquiries}</div>
             <div>Exceptions: {overview.exceptions}</div>
-            <div className="col-span-2">Online booking enabled: {String(overview.bookingEnabled)}</div>
+            <div className="col-span-2">Live stay booking: {String(overview.bookingEnabled)}</div>
           </dl>
         ) : null}
         {tab === "Calendar" && overview ? (
@@ -227,36 +227,173 @@ function QuoteForm({ onDone }: { onDone: () => void }) {
   );
 }
 
+function rupeeField(minor: number | null) {
+  return minor == null ? "" : String(minor / 100);
+}
+
 function PricingForm({ onDone }: { onDone: () => void }) {
-  async function onSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const form = new FormData(e.currentTarget);
-    await fetch("/api/admin/settings", {
+  const [notice, setNotice] = useState<string | null>(null);
+  const [gaps, setGaps] = useState<string[]>([]);
+  const [live, setLive] = useState(false);
+  const [draft, setDraft] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    fetch("/api/admin/settings")
+      .then((r) => r.json())
+      .then((data) => {
+        const d = data.draft ?? {};
+        setLive(Boolean(data.live));
+        setGaps(data.draftGaps ?? []);
+        setDraft({
+          weekday: rupeeField(d.weekdayMinor),
+          weekend: rupeeField(d.weekendMinor),
+          taxBps: d.taxBps == null ? "" : String(d.taxBps),
+          depositBps: d.depositBps == null ? "" : String(d.depositBps),
+          maxGuests: d.maxGuests == null ? "" : String(d.maxGuests),
+          minNights: d.minNights == null ? "" : String(d.minNights),
+          maxNights: d.maxNights == null ? "" : String(d.maxNights),
+          checkInTime: d.checkInTime ?? "",
+          checkOutTime: d.checkOutTime ?? "",
+          cancellationSummary: d.cancellationSummary ?? "",
+          holdMinutes: String(d.holdMinutes ?? 15),
+          termsConfirmed: d.termsConfirmed ? "on" : "",
+          privacyConfirmed: d.privacyConfirmed ? "on" : "",
+          seasonal: JSON.stringify(d.seasonal ?? []),
+        });
+      })
+      .catch(() => setNotice("Could not load stay settings."));
+  }, []);
+
+  async function send(action: "save-draft" | "publish" | "unpublish", e?: FormEvent<HTMLFormElement>) {
+    e?.preventDefault();
+    setNotice(null);
+    const body: Record<string, unknown> = { action };
+    if (action !== "unpublish") {
+      const seasonalRaw = draft.seasonal?.trim();
+      let seasonal: unknown[] = [];
+      if (seasonalRaw) {
+        try {
+          const parsed = JSON.parse(seasonalRaw) as { startDate: string; endDate: string; nightlyInr?: number; nightlyMinor?: number }[];
+          seasonal = parsed.map((row) => ({
+            startDate: row.startDate,
+            endDate: row.endDate,
+            nightlyMinor: row.nightlyMinor ?? Math.round(Number(row.nightlyInr) * 100),
+          }));
+        } catch {
+          setNotice("Seasonal rates must be JSON: [{startDate,endDate,nightlyInr}]");
+          return;
+        }
+      }
+      body.weekdayMinor = draft.weekday ? Math.round(Number(draft.weekday) * 100) : null;
+      body.weekendMinor = draft.weekend ? Math.round(Number(draft.weekend) * 100) : null;
+      body.taxBps = draft.taxBps === "" ? null : Number(draft.taxBps);
+      body.depositBps = draft.depositBps === "" ? null : Number(draft.depositBps);
+      body.maxGuests = draft.maxGuests === "" ? null : Number(draft.maxGuests);
+      body.minNights = draft.minNights === "" ? null : Number(draft.minNights);
+      body.maxNights = draft.maxNights === "" ? null : Number(draft.maxNights);
+      body.checkInTime = draft.checkInTime || null;
+      body.checkOutTime = draft.checkOutTime || null;
+      body.cancellationSummary = draft.cancellationSummary || null;
+      body.holdMinutes = Number(draft.holdMinutes || 15);
+      body.termsConfirmed = draft.termsConfirmed === "on";
+      body.privacyConfirmed = draft.privacyConfirmed === "on";
+      body.seasonal = seasonal;
+    }
+    const res = await fetch("/api/admin/settings", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        ratesPublished: form.get("ratesPublished") === "on",
-        bookingEnabled: form.get("bookingEnabled") === "on",
-        weekdayMinor: form.get("weekdayMinor") ? Number(form.get("weekdayMinor")) : null,
-        weekendMinor: form.get("weekendMinor") ? Number(form.get("weekendMinor")) : null,
-        maxGuests: form.get("maxGuests") ? Number(form.get("maxGuests")) : null,
-      }),
+      body: JSON.stringify(body),
     });
+    const data = await res.json();
+    setGaps(data.missingSettings ?? data.draftGaps ?? []);
+    setLive(Boolean(data.live));
+    if (!res.ok) setNotice(data.error ?? "Could not save.");
+    else setNotice(action === "publish" ? "Published. Live booking uses this snapshot until you unpublish or publish again." : action === "unpublish" ? "Live booking disabled. Draft is unchanged." : "Draft saved. Not live until you publish.");
     onDone();
   }
+
   return (
-    <form onSubmit={onSubmit} className="grid gap-3 text-sm md:grid-cols-2">
-      <p className="col-span-full text-forest/70">Do not publish rates until the owner approves commercial terms.</p>
-      <input name="weekdayMinor" type="number" placeholder="Weekday rate (paise)" className="rounded border px-2 py-1" />
-      <input name="weekendMinor" type="number" placeholder="Weekend rate (paise)" className="rounded border px-2 py-1" />
-      <input name="maxGuests" type="number" placeholder="Max overnight guests" className="rounded border px-2 py-1" />
-      <label className="flex items-center gap-2">
-        <input type="checkbox" name="ratesPublished" /> Publish rates
+    <form onSubmit={(e) => send("save-draft", e)} className="grid gap-3 text-sm md:grid-cols-2">
+      <p className="col-span-full text-forest/70">
+        Save a draft, then publish. Live booking uses only the published snapshot. Amounts are whole-property INR per night, not
+        per room.
+      </p>
+      <p className="col-span-full text-xs uppercase tracking-wide">{live ? "Live booking: on" : "Live booking: off"}</p>
+      <label>
+        Weekday nightly rate (INR)
+        <input value={draft.weekday ?? ""} onChange={(e) => setDraft({ ...draft, weekday: e.target.value })} type="number" min={1} className="field" />
+      </label>
+      <label>
+        Weekend nightly rate (INR)
+        <input value={draft.weekend ?? ""} onChange={(e) => setDraft({ ...draft, weekend: e.target.value })} type="number" min={1} className="field" />
+      </label>
+      <label>
+        Tax (basis points, 1800 = 18%)
+        <input value={draft.taxBps ?? ""} onChange={(e) => setDraft({ ...draft, taxBps: e.target.value })} type="number" min={0} className="field" />
+      </label>
+      <label>
+        Deposit (basis points, 10000 = 100%)
+        <input value={draft.depositBps ?? ""} onChange={(e) => setDraft({ ...draft, depositBps: e.target.value })} type="number" min={0} className="field" />
+      </label>
+      <label>
+        Max overnight guests
+        <input value={draft.maxGuests ?? ""} onChange={(e) => setDraft({ ...draft, maxGuests: e.target.value })} type="number" min={1} className="field" />
+      </label>
+      <label>
+        Min nights
+        <input value={draft.minNights ?? ""} onChange={(e) => setDraft({ ...draft, minNights: e.target.value })} type="number" min={1} className="field" />
+      </label>
+      <label>
+        Max nights
+        <input value={draft.maxNights ?? ""} onChange={(e) => setDraft({ ...draft, maxNights: e.target.value })} type="number" min={1} className="field" />
+      </label>
+      <label>
+        Hold minutes
+        <input value={draft.holdMinutes ?? "15"} onChange={(e) => setDraft({ ...draft, holdMinutes: e.target.value })} type="number" min={5} max={120} className="field" />
+      </label>
+      <label>
+        Check-in time
+        <input value={draft.checkInTime ?? ""} onChange={(e) => setDraft({ ...draft, checkInTime: e.target.value })} type="time" className="field" />
+      </label>
+      <label>
+        Check-out time
+        <input value={draft.checkOutTime ?? ""} onChange={(e) => setDraft({ ...draft, checkOutTime: e.target.value })} type="time" className="field" />
+      </label>
+      <label className="col-span-full">
+        Cancellation and refund policy
+        <textarea value={draft.cancellationSummary ?? ""} onChange={(e) => setDraft({ ...draft, cancellationSummary: e.target.value })} rows={4} className="field" />
+      </label>
+      <label className="col-span-full">
+        Seasonal rates JSON (optional)
+        <textarea value={draft.seasonal ?? "[]"} onChange={(e) => setDraft({ ...draft, seasonal: e.target.value })} rows={3} className="field" />
       </label>
       <label className="flex items-center gap-2">
-        <input type="checkbox" name="bookingEnabled" /> Enable booking
+        <input type="checkbox" checked={draft.termsConfirmed === "on"} onChange={(e) => setDraft({ ...draft, termsConfirmed: e.target.checked ? "on" : "" })} />
+        Terms of stay apply at checkout
       </label>
-      <button className="rounded bg-forest px-3 py-1 text-ivory">Save</button>
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={draft.privacyConfirmed === "on"} onChange={(e) => setDraft({ ...draft, privacyConfirmed: e.target.checked ? "on" : "" })} />
+        Privacy policy applies at checkout
+      </label>
+      {gaps.length ? (
+        <ul className="col-span-full list-disc pl-5 text-dragon">
+          {gaps.map((g) => (
+            <li key={g}>{g}</li>
+          ))}
+        </ul>
+      ) : null}
+      <div className="col-span-full flex flex-wrap gap-2">
+        <button type="submit" className="rounded-full bg-forest px-4 py-2 text-ivory">
+          Save draft
+        </button>
+        <button type="button" className="rounded-full bg-dragon px-4 py-2 text-white" onClick={() => send("publish")}>
+          Publish live booking
+        </button>
+        <button type="button" className="rounded-full border px-4 py-2" onClick={() => send("unpublish")}>
+          Unpublish
+        </button>
+      </div>
+      {notice ? <p className="col-span-full">{notice}</p> : null}
     </form>
   );
 }

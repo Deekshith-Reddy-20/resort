@@ -17,6 +17,10 @@ export async function POST(req: Request) {
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
   const result = await createStayHold(parsed.data);
-  if (!result.ok) return error(result.error, 409);
+  if (!result.ok) {
+    return error(result.error, 409, "STAY_HOLD_BLOCKED", {
+      missingSettings: "missingSettings" in result ? result.missingSettings : undefined,
+    });
+  }
   return json(result, 201);
 }
