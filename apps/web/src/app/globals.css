@@ -1,0 +1,74 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --forest: #123d2d;
+  --evergreen: #09281f;
+  --ivory: #f8f5ed;
+  --beige: #e9e1d4;
+  --dragon: #d93668;
+  --charcoal: #242a25;
+  --stone: #d9d2c4;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--ivory);
+  color: var(--evergreen);
+  overflow-x: hidden;
+}
+
+:focus-visible {
+  outline: 2px solid var(--dragon);
+  outline-offset: 3px;
+}
+
+.skip-link {
+  position: absolute;
+  left: 1rem;
+  top: -4rem;
+  z-index: 80;
+  border-radius: 999px;
+  background: #d93668;
+  color: white;
+  padding: 0.5rem 1rem;
+}
+
+.skip-link:focus {
+  top: 1rem;
+}
+
+@layer components {
+  .field {
+    @apply mt-1 min-h-11 w-full rounded-xl border border-stone bg-ivory px-3 py-2.5 text-base text-evergreen;
+  }
+  .btn {
+    @apply inline-flex min-h-11 items-center justify-center rounded-full px-5 py-2.5 text-sm font-medium transition;
+  }
+  .btn-primary {
+    @apply btn bg-dragon text-white hover:bg-[#c12f5c];
+  }
+  .btn-forest {
+    @apply btn bg-forest text-ivory hover:bg-evergreen;
+  }
+  .btn-ghost {
+    @apply btn border border-ivory/70 text-ivory hover:bg-ivory/10;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

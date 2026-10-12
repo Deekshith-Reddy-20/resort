@@ -1,0 +1,81 @@
+openapi: 3.1.0
+info:
+  title: V-Farms Shared API
+  version: 0.1.0
+  description: |
+    Authoritative API for the V-Farms website and Android app.
+    V-Farms is one property-wide booking inventory for both stays and events.
+    Clients must never independently determine availability, price, payment, or reservation status.
+servers:
+  - url: /api
+paths:
+  /public/config:
+    get:
+      summary: Public runtime configuration
+      responses:
+        "200":
+          description: Non-secret public config
+  /public/property:
+    get:
+      summary: Property profile
+  /public/rooms:
+    get:
+      summary: Informational room profiles (not bookable)
+  /public/gallery:
+    get:
+      summary: Approved genuine video-frame gallery
+  /public/content:
+    get:
+      summary: Published CMS copy
+  /public/faqs:
+    get:
+      summary: FAQs
+  /public/policies:
+    get:
+      summary: Policy documents
+  /availability/search:
+    post:
+      summary: Property-wide stay or event date search
+  /pricing/quote:
+    post:
+      summary: Server-calculated stay quote
+  /bookings/holds:
+    post:
+      summary: Create expiring whole-property stay hold
+  /bookings/{reference}:
+    get:
+      summary: Look up a stay booking with verification
+  /bookings/{reference}/cancel:
+    post:
+      summary: Guest cancellation where policy permits
+  /events/enquiries:
+    post:
+      summary: Submit an event enquiry (does not block inventory)
+  /events/enquiries/{reference}:
+    get:
+      summary: Look up an enquiry with verification
+  /events/quotes/{reference}:
+    get:
+      summary: View an issued quote
+  /events/quotes/{reference}/accept:
+    post:
+      summary: Accept quote and attempt inventory hold
+  /payments/orders:
+    post:
+      summary: Create Razorpay order from immutable snapshot
+  /payments/verify:
+    post:
+      summary: Verify checkout signature then confirm if inventory still valid
+  /payments/webhooks/razorpay:
+    post:
+      summary: Razorpay webhook (raw body signature)
+  /payments/{reference}/status:
+    get:
+      summary: Payment status for a booking or quote
+  /contact:
+    post:
+      summary: Contact form
+  /admin/session:
+    post:
+      summary: Staff login via Supabase Auth
+security: []

@@ -1,0 +1,6 @@
+<resources>
+    <style name="Theme.VFarms" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:statusBarColor">#09281F</item>
+        <item name="android:navigationBarColor">#F8F5ED</item>
+    </style>
+</resources>

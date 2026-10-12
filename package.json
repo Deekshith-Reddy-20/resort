@@ -1,0 +1,27 @@
+{
+  "name": "vfarms-platform",
+  "private": true,
+  "version": "0.1.0",
+  "description": "V-Farms exclusive whole-property stays and events platform",
+  "workspaces": [
+    "apps/web",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @vfarms/web",
+    "build": "npm run build -w @vfarms/web",
+    "start": "npm run start -w @vfarms/web",
+    "lint": "npm run lint -w @vfarms/web",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:inventory": "npm run test -w @vfarms/inventory",
+    "test:web": "npm run test -w @vfarms/web",
+    "test:e2e": "npm run test:e2e -w @vfarms/web",
+    "test:api": "npm run test:api -w @vfarms/web",
+    "android:assemble": "apps/android/gradlew.bat -p apps/android assembleDebug",
+    "android:lint": "apps/android/gradlew.bat -p apps/android lintDebug"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
