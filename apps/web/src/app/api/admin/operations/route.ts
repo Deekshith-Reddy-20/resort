@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { can, currentStaff } from "@/lib/staff";
 import { error, json, isoDate, readJson } from "@/lib/http";
-import { addOperationsNote } from "@/lib/store";
+import { addOperationsNote, runLocked } from "@/lib/store";
 
 const schema = z.object({
   date: isoDate,
@@ -15,5 +15,5 @@ export async function POST(req: Request) {
   if (!can(staff.role, "ops")) return error("Forbidden.", 403);
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
-  return json({ note: addOperationsNote({ ...parsed.data, actor: staff.email }) }, 201);
+  return json({ note: await runLocked(() => addOperationsNote({ ...parsed.data, actor: staff.email })) }, 201);
 }

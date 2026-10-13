@@ -1,6 +1,6 @@
 import { json } from "@/lib/http";
-import { publicFaqs } from "@/lib/store";
+import { publicFaqs, runLockedRead } from "@/lib/store";
 
 export async function GET() {
-  return json({ faqs: publicFaqs() });
+  return json({ faqs: await runLockedRead(() => publicFaqs()) });
 }

@@ -1,6 +1,6 @@
 import { error, json } from "@/lib/http";
 import { verifyWebhookSignature } from "@/lib/payments";
-import { confirmVerifiedPayment, markPaymentFailed, rememberWebhook } from "@/lib/store";
+import { applyRazorpayWebhook } from "@/lib/store";
 
 export const runtime = "nodejs";
 
@@ -23,17 +23,11 @@ export async function POST(req: Request) {
   }
   const payment = payload.payload?.payment?.entity;
   const eventId = req.headers.get("x-razorpay-event-id") ?? `${payload.event}:${payment?.id ?? ""}`;
-  if (eventId && !rememberWebhook(eventId)) {
-    return json({ ok: true, duplicate: true });
-  }
-
-  if (payload.event === "payment.captured" && payment?.id && payment.order_id) {
-    const result = await confirmVerifiedPayment({ orderId: payment.order_id, paymentId: payment.id });
-    return json({ ok: true, duplicate: false, result });
-  }
-  if ((payload.event === "payment.failed" || payload.event === "payment.cancelled") && payment?.order_id) {
-    markPaymentFailed(payment.order_id, payment.id);
-    return json({ ok: true, duplicate: false, result: { status: "failed" } });
-  }
-  return json({ ok: true, ignored: payload.event });
+  const result = await applyRazorpayWebhook({
+    eventId,
+    event: payload.event,
+    paymentId: payment?.id,
+    orderId: payment?.order_id,
+  });
+  return json(result);
 }

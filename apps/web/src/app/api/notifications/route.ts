@@ -1,6 +1,6 @@
 import { json } from "@/lib/http";
 import { currentStaff } from "@/lib/staff";
-import { listNotifications } from "@/lib/store";
+import { listNotifications, runLockedRead } from "@/lib/store";
 
 export async function GET() {
   const staff = await currentStaff();
@@ -14,7 +14,7 @@ export async function GET() {
     });
   }
   return json({
-    notifications: listNotifications(),
+    notifications: await runLockedRead(() => listNotifications()),
     emailConfigured,
     pushConfigured: false,
     notice: emailConfigured

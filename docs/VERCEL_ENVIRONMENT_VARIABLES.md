@@ -1,72 +1,92 @@
 # Vercel environment variables
 
-V-Farms is one exclusive whole-property inventory for stays and events. Rooms are not sellable SKUs.
+Set these in **Vercel → Project → Settings → Environment Variables**. After any change, **redeploy** (env vars are injected at build/runtime for the next deployment). Existing deployments keep the old values until you redeploy.
 
-Copy names from `.env.example`. Never paste real secrets into git, tickets, or client emails.
+Never paste real secrets into git, this file, or chat logs.
 
-Set these in [Vercel → resort → Settings → Environment Variables](https://vercel.com/deekshith10/resort/settings/environment-variables) for **Preview** (and Production later). After the first successful deploy, also set `NEXT_PUBLIC_SITE_URL` to the HTTPS hostname Vercel assigned.
+Use **Preview** and **Production** for everything listed as required on the host. Do not copy local `STAFF_DEV_*` onto Production.
 
-## Required for a usable preview
+## How to add them
 
-| Name | Public? | Mandatory | Purpose | How to validate |
-|---|---|---|---|---|
-| `STAFF_SESSION_SECRET` | Server only | Yes, for `/admin` | HMAC for the staff cookie | `/admin` returns a sign-in form, not 503; invalid login is 401 |
-| `STAFF_DEV_EMAIL` | Server only | Yes until Supabase Auth is wired | Preview owner login | Sign-in with this email |
-| `STAFF_DEV_PASSWORD` | Server only | Yes until Supabase Auth | Preview owner login | Use a unique password; not the local one |
+1. Open the Vercel project that serves `https://resort-delta-nine.vercel.app`.
+2. Settings → Environment Variables.
+3. Add each name below. Mark Production and Preview as specified.
+4. Redeploy the latest git commit (Deployments → ⋮ → Redeploy, or push a new commit).
+5. Confirm the deployment is that commit SHA, not an older Node 20 build.
 
-Generate the session secret locally (`openssl rand -hex 32`) and paste only into Vercel. Do not reuse a password you already shared.
+## Required for hosted `/admin` (Supabase Auth)
 
-## Public (safe in the browser bundle)
+| Name | Required | Public? | Environments | Purpose | Used in | How to validate |
+|---|---|---|---|---|---|---|
+| `STAFF_SESSION_SECRET` | Yes | Server | Preview + Production | HMAC for `vfarms_staff` cookie | `apps/web/src/lib/staff.ts` | `/api/admin/session` GET returns `configured: true`, `method: "supabase"`. Generate with `openssl rand -hex 32` |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public | Preview + Production | Supabase project URL | `supabase-admin.ts` | Sign-in form no longer says auth is unconfigured |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes | Public | Preview + Production | Auth `signInWithPassword` | `supabase-admin.ts` | Invalid password → 401, not 503 |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes | Server | Preview + Production | Read `admin_profiles`; persist `runtime_state` | `staff.ts`, `persist.ts` | Authorized staff 200; unknown Auth user 403 |
 
-| Name | Mandatory | Purpose | How to validate |
-|---|---|---|---|
-| `NEXT_PUBLIC_SITE_URL` | Recommended after first deploy | Canonical origin for metadata, sitemap, robots | View page source: Open Graph URLs are `https://…`, not `localhost` |
-| `NEXT_PUBLIC_SUPABASE_URL` | No (APIs use memory until the adapter is wired) | Future browser Supabase client | Presence only; does not persist bookings today |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | No | Future anon key | Must never be a service-role key |
+## Persistence
 
-## Server-only (never `NEXT_PUBLIC_*`)
+| Name | Required | Public? | Environments | Purpose | Used in | How to validate |
+|---|---|---|---|---|---|---|
+| `DATABASE_MODE` | Yes on Vercel for durable data | Server | Preview + Production | `supabase` enables `runtime_state`. `memory` disables it | `supabase-admin.ts` | Admin Overview persistency string contains `runtime_state`, not `memory` |
+| `PROPERTY_ID` | Optional (`vfarms-hyderabad`) | Server | Both | Snapshot key | `store.ts`, `persist.ts` | Must match a single estate |
 
-| Name | Mandatory for preview | Purpose |
-|---|---|---|
-| `DATABASE_MODE` | Default `memory` | `memory` = in-process store (does **not** persist on Vercel serverless). `supabase` is **not implemented** in application code yet |
-| `SUPABASE_SERVICE_ROLE_KEY` | No until adapter exists | Must stay server-only; unused by runtime APIs today |
-| `PROPERTY_ID` | Optional (`vfarms-hyderabad`) | Single sellable property id |
-| `PROPERTY_TIMEZONE` | Optional (`Asia/Kolkata`) | Documented timezone |
-| `HOLD_MINUTES` | Optional (`15`) | Default hold if unpublished commercial snapshot has no value |
-| `RAZORPAY_KEY_ID` | No | Test key id; Checkout stays disabled if empty |
-| `RAZORPAY_KEY_SECRET` | No | Server-only order + signature verify |
-| `RAZORPAY_WEBHOOK_SECRET` | No | Webhook HMAC |
-| `RAZORPAY_LIVE_MODE` | Set `false` | Must stay false on preview |
-| `RESEND_API_KEY` | No | Transactional email |
-| `EMAIL_FROM` | No | Verified sender |
-| `NOTIFY_OWNER_EMAIL` | No | Owner enquiry copy |
-| `RATE_LIMIT_MAX` | Optional | API throttle |
-| `RATE_LIMIT_WINDOW_MS` | Optional | API throttle window |
+On Vercel, if `DATABASE_MODE` is unset and URL + service role exist, persistence turns on automatically. Set `DATABASE_MODE=memory` only to force a non-durable rollback.
 
 ## Do not set on Vercel
 
 | Name | Why |
 |---|---|
-| `DEV_STAY_CONFIG_PUBLISH` | Local-only rate bootstrap. Would publish unpublished owner rates |
-| `DEV_WEEKDAY_INR` / other `DEV_*` commercial fields | Invented or local-only tariffs |
-| Any `NEXT_PUBLIC_` Razorpay **secret** or service-role key | Would leak in the client bundle |
+| `STAFF_DEV_EMAIL` | Production must use Supabase Auth |
+| `STAFF_DEV_PASSWORD` | Same |
+| `STAFF_ALLOW_DEV_PASSWORD` | Local-only switch |
+| `DEV_STAY_CONFIG_PUBLISH` and other `DEV_*` commercial fields | Would publish unpublished owner rates |
+| Any `NEXT_PUBLIC_` service-role or Razorpay secret | Leaks in the browser bundle |
+
+## Public site
+
+| Name | Required | Public? | Environments | Purpose | Used in | How to validate |
+|---|---|---|---|---|---|---|
+| `NEXT_PUBLIC_SITE_URL` | Recommended | Public | Production (and Preview if you want a fixed origin) | Canonical URLs | `site.ts` | Open Graph URLs are `https://…`, not localhost |
+
+## Payments (required before charging guests; optional until then)
+
+| Name | Required | Public? | Environments | Purpose | Used in | How to validate |
+|---|---|---|---|---|---|---|
+| `RAZORPAY_KEY_ID` | For checkout | Server (id is also returned to Checkout) | Preview test keys; Production live only when going live | Order create | `payments.ts`, orders route | Missing → 503 `PAYMENTS_NOT_CONFIGURED` |
+| `RAZORPAY_KEY_SECRET` | For checkout | Server | Same | Order + checkout HMAC | `payments.ts`, verify route | Invalid signature → 400 |
+| `RAZORPAY_WEBHOOK_SECRET` | For webhooks | Server | Same | Webhook HMAC | webhooks/razorpay | Invalid signature → 400 |
+| `RAZORPAY_LIVE_MODE` | Set `false` until go-live | Server | Preview `false` | Flag only | `store.ts` | Admin integrations `razorpayLive` |
+
+Webhook URL: `https://<host>/api/payments/webhooks/razorpay`  
+Events: `payment.captured`, `payment.failed`. A Checkout success screen is not confirmation.
+
+## Email (optional)
+
+| Name | Required | Public? | Purpose |
+|---|---|---|---|
+| `RESEND_API_KEY` | No | Server | Transactional email |
+| `EMAIL_FROM` | No | Server | Verified sender |
+| `NOTIFY_OWNER_EMAIL` | No | Server | Enquiry copy |
+
+## Other optional
+
+| Name | Default | Purpose |
+|---|---|---|
+| `PROPERTY_TIMEZONE` | `Asia/Kolkata` | Documented timezone |
+| `HOLD_MINUTES` | `15` | Hold length if unpublished snapshot has no value |
+| `RATE_LIMIT_MAX` | `60` | API throttle |
+| `RATE_LIMIT_WINDOW_MS` | `60000` | Throttle window |
+| `BOOKING_ENABLED` | unused by live commercial | Publication is the admin Pricing publish action, not this flag |
 
 ## Automatic (Vercel-provided)
 
-`VERCEL`, `VERCEL_ENV`, `VERCEL_URL` are set by the platform. The app uses `VERCEL_URL` for canonical links when `NEXT_PUBLIC_SITE_URL` is empty. Do not treat `VERCEL_URL` as a payment trust source from the browser.
+`VERCEL`, `VERCEL_ENV`, `VERCEL_URL`. Do not treat `VERCEL_URL` as a payment trust source from the browser.
 
-## Preview vs Production
+## After configuration
 
-Use **test** Razorpay keys on Preview. Do not put live merchant keys on a public preview URL. Enable [Deployment Protection](https://vercel.com/docs/deployment-protection) on Preview so `/admin` is not only guarded by a guessable password.
+Redeploy. Confirm the deployment uses the git commit that contains this documentation. Then:
 
-## Supabase (not runtime-ready)
-
-Migrations live in `supabase/migrations/`. RLS and `vfarms_inventory_guard` are in SQL. Runtime APIs still use `DATABASE_MODE=memory`. A green frontend build does **not** mean Postgres is the inventory source of truth.
-
-When the adapter is wired, Preview Auth redirect URLs will be `https://<preview-host>/admin` (and any future callback). Apply migrations on a dedicated non-production project first.
-
-## Razorpay test webhook (after you have an HTTPS URL)
-
-Dashboard webhook URL: `https://<your-preview-host>/api/payments/webhooks/razorpay`  
-Events: `payment.captured`, `payment.failed`.  
-Confirmation still requires HMAC verification. A Checkout “success” animation is not a booking.
+1. `GET /api/admin/session` → `configured: true`, `method: "supabase"`.
+2. Sign in with the Auth user that has `admin_profiles`.
+3. Overview persistency is `supabase runtime_state`.
+4. Keep stay checkout unpublished until Razorpay test capture + webhook are verified.

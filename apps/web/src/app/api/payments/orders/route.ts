@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { error, json, readJson } from "@/lib/http";
 import { createRazorpayOrder, razorpayConfigured } from "@/lib/payments";
-import { attachOrder, preparePayment } from "@/lib/store";
+import { attachOrder, preparePayment, runLocked } from "@/lib/store";
 
 const schema = z.object({
   stayReference: z.string().optional(),
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
   if (!razorpayConfigured()) {
     return error("Payments are not configured. Razorpay test credentials are required.", 503, "PAYMENTS_NOT_CONFIGURED");
   }
-  const prepared = preparePayment(parsed.data);
+  const prepared = await runLocked(() => preparePayment(parsed.data));
   if (!prepared.ok) {
     return error(prepared.error, prepared.status, "code" in prepared ? prepared.code : undefined);
   }

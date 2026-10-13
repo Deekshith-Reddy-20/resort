@@ -132,8 +132,11 @@ export function StayFlow() {
     if (quoteLoading) return "Checking availability…";
     if (checkIn && checkOut && checkOut <= checkIn) return "Choose a check-out after check-in";
     if (!quote) return "Select dates to continue";
+    if (quote.blockCode === "persistence") {
+      return quote.blockMessage ?? "Database persistence is not configured.";
+    }
     if (quote.blockCode === "unpublished" || (quote.missingSettings && quote.missingSettings.length > 0)) {
-      return quote.blockMessage ?? "Whole-property rates are not published.";
+      return quote.blockMessage ?? "Online stay booking is not published.";
     }
     if (quote.blockCode === "unavailable" || quote.availabilityReason) {
       if (!quote.available) return quote.blockMessage ?? quote.availabilityReason ?? "The property is unavailable for the selected dates.";

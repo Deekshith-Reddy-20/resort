@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { email, json, personName, phone, readJson } from "@/lib/http";
-import { addContact } from "@/lib/store";
+import { addContact, runLocked } from "@/lib/store";
 
 const schema = z.object({
   name: personName,
@@ -12,14 +12,16 @@ const schema = z.object({
 export async function POST(req: Request) {
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
-  addContact({
-    id: crypto.randomUUID(),
-    name: parsed.data.name,
-    email: parsed.data.email,
-    phone: parsed.data.phone,
-    message: parsed.data.message,
-    createdAt: new Date().toISOString(),
-  });
+  await runLocked(() =>
+    addContact({
+      id: crypto.randomUUID(),
+      name: parsed.data.name,
+      email: parsed.data.email,
+      phone: parsed.data.phone,
+      message: parsed.data.message,
+      createdAt: new Date().toISOString(),
+    }),
+  );
   const emailConfigured = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
   return json({
     ok: true,

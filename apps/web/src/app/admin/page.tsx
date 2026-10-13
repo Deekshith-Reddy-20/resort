@@ -6,12 +6,18 @@ import { AdminDashboard } from "@/components/AdminDashboard";
 export default function AdminPage() {
   const [authed, setAuthed] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [method, setMethod] = useState<"dev" | "supabase" | "none">("none");
+  const [configured, setConfigured] = useState(false);
 
   useEffect(() => {
-    fetch("/api/admin/overview").then((res) => {
-      if (res.status === 401) setAuthed(false);
-      else if (res.ok) setAuthed(true);
-    });
+    fetch("/api/admin/session")
+      .then((res) => res.json())
+      .then((data) => {
+        setConfigured(Boolean(data.configured));
+        setMethod(data.method ?? "none");
+        if (data.authenticated) setAuthed(true);
+      })
+      .catch(() => undefined);
   }, []);
 
   async function login(e: FormEvent<HTMLFormElement>) {
@@ -32,13 +38,18 @@ export default function AdminPage() {
       <main className="mx-auto max-w-md px-4 py-16">
         <h1 className="font-serif text-4xl">Staff sign-in</h1>
         <p className="mt-3 text-sm text-muted">
-          No default production password exists. Set STAFF_SESSION_SECRET, STAFF_DEV_EMAIL and STAFF_DEV_PASSWORD for local
-          access, or connect Supabase Auth.
+          {method === "supabase"
+            ? "Sign in with an authorized Supabase Auth staff account. Roles come from admin_profiles, not from the browser."
+            : method === "dev"
+              ? "Local development password login is enabled on this machine only."
+              : "Staff authentication is not configured on the server. Hosted sites need STAFF_SESSION_SECRET, Supabase Auth, and an admin_profiles row. Development passwords are not used in production."}
         </p>
         <form onSubmit={login} className="mt-6 space-y-3">
-          <input name="email" type="email" required placeholder="Staff email" className="field" />
-          <input name="password" type="password" required minLength={8} placeholder="Password" className="field" />
-          <button className="btn-primary w-full">Sign in</button>
+          <input name="email" type="email" required placeholder="Staff email" className="field" disabled={!configured && method === "none"} />
+          <input name="password" type="password" required minLength={8} placeholder="Password" className="field" disabled={!configured && method === "none"} />
+          <button className="btn-primary w-full" disabled={!configured && method === "none"}>
+            Sign in
+          </button>
         </form>
         {error ? <p className="mt-4 text-dragon">{error}</p> : null}
       </main>

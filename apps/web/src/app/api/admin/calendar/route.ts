@@ -1,6 +1,6 @@
 import { error, json } from "@/lib/http";
 import { currentStaff } from "@/lib/staff";
-import { propertyMonth } from "@/lib/store";
+import { propertyMonth, runLockedRead } from "@/lib/store";
 
 export async function GET(req: Request) {
   const staff = await currentStaff();
@@ -14,5 +14,5 @@ export async function GET(req: Request) {
   if (monthIndex < 0 || monthIndex > 11 || !Number.isFinite(year)) {
     return error("Month must be YYYY-MM.", 400);
   }
-  return json(propertyMonth(year, monthIndex));
+  return json(await runLockedRead(() => propertyMonth(year, monthIndex)));
 }

@@ -1,12 +1,12 @@
 import { error, json } from "@/lib/http";
-import { lookupEnquiry } from "@/lib/store";
+import { lookupEnquiry, runLockedRead } from "@/lib/store";
 
 export async function GET(req: Request, ctx: { params: Promise<{ reference: string }> }) {
   const { reference } = await ctx.params;
   const url = new URL(req.url);
   const email = url.searchParams.get("email") ?? "";
   const phone = url.searchParams.get("phone") ?? "";
-  const found = lookupEnquiry(reference, email, phone);
+  const found = await runLockedRead(() => lookupEnquiry(reference, email, phone));
   if (!found) return error("Enquiry not found.", 404);
   return json({
     reference: found.enquiry.reference,

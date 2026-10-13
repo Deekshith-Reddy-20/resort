@@ -1,6 +1,6 @@
 import { json } from "@/lib/http";
-import { publicPolicies } from "@/lib/store";
+import { publicPolicies, runLockedRead } from "@/lib/store";
 
 export async function GET() {
-  return json(publicPolicies());
+  return json(await runLockedRead(() => publicPolicies()));
 }

@@ -4,6 +4,8 @@ import { error, json, readJson } from "@/lib/http";
 import {
   commercialState,
   publishStayConfig,
+  runLocked,
+  runLockedRead,
   unpublishStayConfig,
   updateDraftSettings,
 } from "@/lib/store";
@@ -38,7 +40,7 @@ const draftSchema = z.object({
 export async function GET() {
   const staff = await currentStaff();
   if (!staff) return error("Unauthorized.", 401);
-  return json(commercialState());
+  return json(await runLockedRead(() => commercialState()));
 }
 
 export async function POST(req: Request) {
@@ -48,14 +50,16 @@ export async function POST(req: Request) {
   const parsed = await readJson(req, draftSchema);
   if (!parsed.ok) return parsed.response;
   const { action, ...patch } = parsed.data;
-  if (action === "unpublish") {
-    return json(unpublishStayConfig(staff.email));
-  }
-  updateDraftSettings(patch, staff.email);
-  if (action === "publish") {
-    const result = publishStayConfig(staff.email);
-    if (!result.ok) return error(result.error, 422, "STAY_CONFIG_INCOMPLETE", { missingSettings: result.missingSettings });
-    return json(result);
-  }
-  return json(commercialState());
+  return runLocked(() => {
+    if (action === "unpublish") {
+      return json(unpublishStayConfig(staff.email));
+    }
+    updateDraftSettings(patch, staff.email);
+    if (action === "publish") {
+      const result = publishStayConfig(staff.email);
+      if (!result.ok) return error(result.error, 422, "STAY_CONFIG_INCOMPLETE", { missingSettings: result.missingSettings });
+      return json(result);
+    }
+    return json(commercialState());
+  });
 }

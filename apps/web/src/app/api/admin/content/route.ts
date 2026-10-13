@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { can, currentStaff } from "@/lib/staff";
 import { error, json, readJson } from "@/lib/http";
-import { saveFaqDraft, updateCms } from "@/lib/store";
+import { runLocked, saveFaqDraft, updateCms } from "@/lib/store";
 
 const schema = z.object({
   heroTagline: z.string().max(160).optional(),
@@ -27,7 +27,11 @@ export async function POST(req: Request) {
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
   const { faqQ, faqA, faqPublished, ...cmsPatch } = parsed.data;
-  const cms = updateCms(cmsPatch, staff.email);
-  const faqs = faqQ && faqA ? saveFaqDraft({ q: faqQ, a: faqA, published: Boolean(faqPublished) }, staff.email) : undefined;
-  return json({ cms, faqs });
+  return json(
+    await runLocked(() => {
+      const cms = updateCms(cmsPatch, staff.email);
+      const faqs = faqQ && faqA ? saveFaqDraft({ q: faqQ, a: faqA, published: Boolean(faqPublished) }, staff.email) : undefined;
+      return { cms, faqs };
+    }),
+  );
 }

@@ -1,6 +1,6 @@
 import { json } from "@/lib/http";
-import { publicProperty } from "@/lib/store";
+import { publicProperty, runLockedRead } from "@/lib/store";
 
 export async function GET() {
-  return json(publicProperty());
+  return json(await runLockedRead(() => publicProperty()));
 }

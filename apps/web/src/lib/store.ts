@@ -5,9 +5,42 @@ import {
   resolveLatePayment,
   type RatePlan,
 } from "@vfarms/inventory";
-import { withLock } from "./mutex";
+import { withLock as mutexLock } from "./mutex";
+import { persistEnabled, pullStore, pushStore, registerStoreIo } from "./persist";
 import { emptyCommercial, stayConfigGaps, type CommercialSettings } from "./commercial";
 import { BRAND, FAQS, GALLERY, POLICIES, ROOMS } from "./content";
+
+const PROPERTY_ID = process.env.PROPERTY_ID ?? "vfarms-hyderabad";
+
+async function withLock<T>(key: string, fn: () => Promise<T> | T, alreadyLocked = false): Promise<T> {
+  if (alreadyLocked) return await fn();
+  return mutexLock(key, async () => {
+    if (persistEnabled()) {
+      const loaded = await pullStore();
+      if (!loaded) throw new Error("Inventory store could not be loaded from the database.");
+    }
+    const result = await fn();
+    if (persistEnabled()) {
+      const saved = await pushStore();
+      if (!saved) throw new Error("Inventory store could not be saved.");
+    }
+    return result;
+  });
+}
+
+export async function runLocked<T>(fn: () => T | Promise<T>): Promise<T> {
+  return withLock(PROPERTY_ID, () => fn());
+}
+
+export async function runLockedRead<T>(fn: () => T | Promise<T>): Promise<T> {
+  return mutexLock(PROPERTY_ID, async () => {
+    if (persistEnabled()) {
+      const loaded = await pullStore();
+      if (!loaded) throw new Error("Inventory store could not be loaded from the database.");
+    }
+    return fn();
+  });
+}
 
 export type StayStatus =
   | "held"
@@ -287,7 +320,14 @@ export function resetStore() {
   globalStore.__vfarmsDb = emptyDb();
 }
 
-const PROPERTY_ID = process.env.PROPERTY_ID ?? "vfarms-hyderabad";
+export function serializeStore(): Record<string, unknown> {
+  return JSON.parse(JSON.stringify(db())) as Record<string, unknown>;
+}
+
+export function hydrateFromPayload(payload: unknown) {
+  if (!payload || typeof payload !== "object") return;
+  globalStore.__vfarmsDb = hydrateDb({ ...emptyDb(), ...(payload as Db) });
+}
 
 function nowIso() {
   return new Date().toISOString();
@@ -398,11 +438,21 @@ function ratePlan(): RatePlan {
 }
 
 export function bookingBlockers(): string[] {
+  const issues: string[] = [];
+  if (process.env.VERCEL && !persistEnabled()) {
+    issues.push(
+      "Database persistence is not configured on this host. Set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, apply migrations including runtime_state, then set DATABASE_MODE=supabase.",
+    );
+  }
   const live = liveCommercial();
-  if (!live) return stayConfigGaps(db().settings.draft).length
-    ? ["Online stay booking is not published.", ...stayConfigGaps(db().settings.draft)]
-    : ["Online stay booking is not published. Save a complete draft, then publish."];
-  return [];
+  if (!live) {
+    issues.push(
+      ...(stayConfigGaps(db().settings.draft).length
+        ? ["Online stay booking is not published. Authorized staff must save a complete Pricing draft, then publish.", ...stayConfigGaps(db().settings.draft)]
+        : ["Online stay booking is not published. Authorized staff must save a complete Pricing draft, then publish."]),
+    );
+  }
+  return issues;
 }
 
 export function publicConfig() {
@@ -423,6 +473,10 @@ export function publicConfig() {
     checkOutTime: live?.checkOutTime ?? null,
     cancellationSummary: live?.cancellationSummary ?? null,
     missingSettings,
+    persistencyReady: persistEnabled() || !process.env.VERCEL,
+    persistency: persistEnabled()
+      ? "supabase runtime_state (server-only)"
+      : "in-process memory (not production persistence)",
     location: BRAND.location,
     razorpayKeyId: process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_LIVE_MODE !== "true" ? process.env.RAZORPAY_KEY_ID : process.env.RAZORPAY_KEY_ID ?? null,
     mediaNote: BRAND.mediaNote,
@@ -555,31 +609,39 @@ function stayWindowIssue(checkIn: string, live: CommercialSettings | null) {
   return null;
 }
 
+function evaluateAvailability(input: {
+  product: "stay" | "event";
+  startDate: string;
+  endDate: string;
+  guests?: number;
+}) {
+  const proposed =
+    input.product === "stay"
+      ? { kind: "stay" as const, startDate: input.startDate, endDate: input.endDate }
+      : { kind: "event" as const, startDate: input.startDate, endDate: input.endDate };
+  const result = canAllocate(proposed, snapshot(), PROPERTY_ID);
+  return {
+    propertyId: PROPERTY_ID,
+    product: input.product,
+    available: result.ok,
+    reason: result.ok ? undefined : result.message,
+    guests: input.guests ?? null,
+    capacityConfigured: liveCommercial()?.maxGuests != null,
+  };
+}
+
 export async function searchAvailability(input: {
   product: "stay" | "event";
   startDate: string;
   endDate: string;
   guests?: number;
 }) {
-  return withLock(PROPERTY_ID, async () => {
-    const proposed =
-      input.product === "stay"
-        ? { kind: "stay" as const, startDate: input.startDate, endDate: input.endDate }
-        : { kind: "event" as const, startDate: input.startDate, endDate: input.endDate };
-    const result = canAllocate(proposed, snapshot(), PROPERTY_ID);
-    return {
-      propertyId: PROPERTY_ID,
-      product: input.product,
-      available: result.ok,
-      reason: result.ok ? undefined : result.message,
-      guests: input.guests ?? null,
-      capacityConfigured: liveCommercial()?.maxGuests != null,
-    };
-  });
+  return withLock(PROPERTY_ID, async () => evaluateAvailability(input));
 }
 
 export async function createStayQuote(input: { checkIn: string; checkOut: string; guests: number }) {
-  const availability = await searchAvailability({
+  return withLock(PROPERTY_ID, async () => {
+  const availability = evaluateAvailability({
     product: "stay",
     startDate: input.checkIn,
     endDate: input.checkOut,
@@ -597,10 +659,10 @@ export async function createStayQuote(input: { checkIn: string; checkOut: string
   const missingSettings = bookingBlockers();
   const windowIssue = stayWindowIssue(input.checkIn, live);
   const available = availability.available && quote.available !== false && !windowIssue;
-  let blockCode: "none" | "unpublished" | "unavailable" | "capacity" | "stay_rules" | "booking_window" = "none";
+  let blockCode: "none" | "unpublished" | "persistence" | "unavailable" | "capacity" | "stay_rules" | "booking_window" = "none";
   let blockMessage: string | null = null;
   if (missingSettings.length) {
-    blockCode = "unpublished";
+    blockCode = missingSettings[0]?.startsWith("Database persistence") ? "persistence" : "unpublished";
     blockMessage = missingSettings[0] ?? "Whole-property stay settings are not published.";
   } else if (windowIssue) {
     blockCode = "booking_window";
@@ -623,6 +685,7 @@ export async function createStayQuote(input: { checkIn: string; checkOut: string
     checkInTime: live?.checkInTime ?? null,
     checkOutTime: live?.checkOutTime ?? null,
   };
+  });
 }
 
 export async function createStayHold(input: {
@@ -783,6 +846,7 @@ export async function createEventEnquiry(input: {
   vendorRequests?: string;
   notes?: string;
 }) {
+  return withLock(PROPERTY_ID, async () => {
   const customer: Customer = {
     id: crypto.randomUUID(),
     fullName: input.fullName,
@@ -819,6 +883,7 @@ export async function createEventEnquiry(input: {
     status: enquiry.status,
     message: "Enquiry received. This is not a confirmed booking and does not reserve the calendar.",
   };
+  });
 }
 
 export function lookupEnquiry(reference: string, email: string, phone: string) {
@@ -867,6 +932,7 @@ export async function issueQuote(input: {
   expiresHours?: number;
   actor?: string;
 }) {
+  return withLock(PROPERTY_ID, async () => {
   const enquiry = db().events.find((e) => e.reference === input.enquiryReference);
   if (!enquiry) return { ok: false as const, error: "Enquiry not found." };
   const totalMinor = input.lineItems.reduce((s, l) => s + l.amountMinor, 0);
@@ -894,6 +960,7 @@ export async function issueQuote(input: {
     quote,
     availabilityWarning: alloc.ok ? null : alloc.message ?? "Dates are currently occupied. The quote does not hold inventory.",
   };
+  });
 }
 
 export async function acceptQuote(quoteReference: string, email: string, phone: string) {
@@ -1018,6 +1085,7 @@ export function markPaymentFailed(orderId: string, paymentId?: string) {
 }
 
 export async function attachOrder(args: { stayReference?: string; quoteReference?: string; orderId: string; amountMinor: number }) {
+  return withLock(PROPERTY_ID, async () => {
   const payment: PaymentRecord = {
     id: crypto.randomUUID(),
     stayReference: args.stayReference,
@@ -1033,13 +1101,19 @@ export async function attachOrder(args: { stayReference?: string; quoteReference
     if (stay && stay.status === "held") stay.status = "awaiting_payment";
   }
   return payment;
+  });
 }
 
-export async function confirmVerifiedPayment(args: {
-  orderId: string;
-  paymentId: string;
-}): Promise<{ status: string; reference?: string; exception?: string }> {
-  return withLock(PROPERTY_ID, async () => {
+export async function confirmVerifiedPayment(
+  args: {
+    orderId: string;
+    paymentId: string;
+  },
+  alreadyLocked = false,
+): Promise<{ status: string; reference?: string; exception?: string }> {
+  return withLock(
+    PROPERTY_ID,
+    async () => {
     const payment = db().payments.find((p) => p.orderId === args.orderId);
     if (!payment) return { status: "unknown_order" };
     if (payment.status === "captured") return { status: "already_captured", reference: payment.stayReference ?? payment.quoteReference };
@@ -1127,6 +1201,30 @@ export async function confirmVerifiedPayment(args: {
       return { status: "confirmed", reference: enquiry.reference };
     }
     return { status: "unlinked_payment" };
+    },
+    alreadyLocked,
+  );
+}
+
+export async function applyRazorpayWebhook(input: {
+  eventId: string;
+  event?: string;
+  paymentId?: string;
+  orderId?: string;
+}) {
+  return withLock(PROPERTY_ID, async () => {
+    if (input.eventId && !rememberWebhook(input.eventId)) {
+      return { ok: true as const, duplicate: true as const };
+    }
+    if (input.event === "payment.captured" && input.paymentId && input.orderId) {
+      const result = await confirmVerifiedPayment({ orderId: input.orderId, paymentId: input.paymentId }, true);
+      return { ok: true as const, duplicate: false as const, result };
+    }
+    if ((input.event === "payment.failed" || input.event === "payment.cancelled") && input.orderId) {
+      markPaymentFailed(input.orderId, input.paymentId);
+      return { ok: true as const, duplicate: false as const, result: { status: "failed" } };
+    }
+    return { ok: true as const, ignored: input.event };
   });
 }
 
@@ -1418,15 +1516,18 @@ export function addMaintenance(startDate: string, endDate: string, reason: strin
 
 export function integrationStatus() {
   return {
-    databaseMode: process.env.DATABASE_MODE ?? "memory",
+    databaseMode: persistEnabled() ? "supabase" : (process.env.DATABASE_MODE ?? "memory"),
     supabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    supabaseService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
     staffSecret: Boolean(process.env.STAFF_SESSION_SECRET),
     razorpayKeyId: Boolean(process.env.RAZORPAY_KEY_ID),
     razorpaySecret: Boolean(process.env.RAZORPAY_KEY_SECRET),
     razorpayWebhook: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
     razorpayLive: process.env.RAZORPAY_LIVE_MODE === "true",
     email: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
-    persistency: (process.env.DATABASE_MODE ?? "memory") === "supabase" ? "supabase" : "in-process memory (not production persistence)",
+    persistency: persistEnabled()
+      ? "supabase runtime_state (server-only)"
+      : "in-process memory (not production persistence)",
   };
 }
 
@@ -1538,3 +1639,5 @@ export function updateMapZone(id: string, patch: Partial<MapZone>, actor?: strin
   audit("map.update", "map", id, actor);
   return { ok: true as const, zone };
 }
+
+registerStoreIo({ serialize: serializeStore, hydrate: hydrateFromPayload });
