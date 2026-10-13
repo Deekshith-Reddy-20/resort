@@ -6,7 +6,8 @@ import {
   type RatePlan,
 } from "@vfarms/inventory";
 import { withLock as mutexLock } from "./mutex";
-import { persistEnabled, pullStore, pushStore, registerStoreIo } from "./persist";
+import { lastPersistFailure, persistEnabled, pullStore, pushStore, registerStoreIo } from "./persist";
+import { PersistError } from "./persist-error";
 import { emptyCommercial, stayConfigGaps, type CommercialSettings } from "./commercial";
 import { persistenceMessage } from "./hosted-config";
 import { supabaseServiceKey, supabaseUrl } from "./supabase-admin";
@@ -19,12 +20,12 @@ async function withLock<T>(key: string, fn: () => Promise<T> | T, alreadyLocked 
   return mutexLock(key, async () => {
     if (persistEnabled()) {
       const loaded = await pullStore();
-      if (!loaded) throw new Error("Inventory store could not be loaded from the database.");
+      if (!loaded) throw new PersistError(lastPersistFailure() ?? { operation: "runtime_state.pull", code: null, reason: "unknown", message: "Inventory store could not be loaded from the database." });
     }
     const result = await fn();
     if (persistEnabled()) {
       const saved = await pushStore();
-      if (!saved) throw new Error("Inventory store could not be saved.");
+      if (!saved) throw new PersistError(lastPersistFailure() ?? { operation: "runtime_state.push", code: null, reason: "unknown", message: "Inventory store could not be saved." });
     }
     return result;
   });
@@ -38,7 +39,7 @@ export async function runLockedRead<T>(fn: () => T | Promise<T>): Promise<T> {
   return mutexLock(PROPERTY_ID, async () => {
     if (persistEnabled()) {
       const loaded = await pullStore();
-      if (!loaded) throw new Error("Inventory store could not be loaded from the database.");
+      if (!loaded) throw new PersistError(lastPersistFailure() ?? { operation: "runtime_state.pull", code: null, reason: "unknown", message: "Inventory store could not be loaded from the database." });
     }
     return fn();
   });
@@ -472,10 +473,11 @@ export function publicConfig() {
     checkOutTime: live?.checkOutTime ?? null,
     cancellationSummary: live?.cancellationSummary ?? null,
     missingSettings,
-    persistencyReady: persistEnabled() || !process.env.VERCEL,
+    persistencyReady: persistEnabled() && !lastPersistFailure(),
     persistency: persistEnabled()
       ? "supabase runtime_state (server-only)"
       : "in-process memory (not production persistence)",
+    persistFailure: lastPersistFailure(),
     location: BRAND.location,
     razorpayKeyId: process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_LIVE_MODE !== "true" ? process.env.RAZORPAY_KEY_ID : process.env.RAZORPAY_KEY_ID ?? null,
     mediaNote: BRAND.mediaNote,

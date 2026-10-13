@@ -1,4 +1,5 @@
 import { withLock as mutexLock } from "./mutex";
+import { PersistError, classifyPersistError, type PersistFailure } from "./persist-error";
 import { serviceClient, usingSupabaseStore } from "./supabase-admin";
 
 const PROPERTY = process.env.PROPERTY_ID ?? "vfarms-hyderabad";
@@ -9,6 +10,7 @@ type StoreIo = {
 };
 
 let io: StoreIo | null = null;
+let lastFailure: PersistFailure | null = null;
 
 export function registerStoreIo(next: StoreIo) {
   io = next;
@@ -18,49 +20,78 @@ export function persistEnabled() {
   return usingSupabaseStore();
 }
 
-export class PersistError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "PersistError";
-  }
+export function lastPersistFailure() {
+  return lastFailure;
+}
+
+function logFailure(failure: PersistFailure) {
+  lastFailure = failure;
+  console.error("inventory persist failed", failure.operation, failure.code ?? "none", failure.reason);
+}
+
+function emptyRow(error: { code?: string } | null) {
+  return error?.code === "PGRST116";
 }
 
 export async function pullStore() {
+  lastFailure = null;
   if (!persistEnabled() || !io) return true;
   const client = serviceClient();
-  if (!client) return false;
-  const { data, error } = await client.from("runtime_state").select("payload").eq("property_slug", PROPERTY).maybeSingle();
-  if (error) {
-    console.error("runtime_state pull failed", error.code);
+  if (!client) {
+    const failure: PersistFailure = {
+      operation: "runtime_state.pull",
+      code: null,
+      reason: "missing_config",
+      message: "Inventory persistence is not configured on the server.",
+    };
+    logFailure(failure);
     return false;
   }
-  if (data?.payload) io.hydrate(data.payload);
+  const { data, error } = await client.from("runtime_state").select("payload").eq("property_slug", PROPERTY).limit(1);
+  if (error && !emptyRow(error)) {
+    logFailure(classifyPersistError("runtime_state.pull", error));
+    return false;
+  }
+  const row = Array.isArray(data) ? data[0] : data;
+  if (row?.payload && typeof row.payload === "object") {
+    try {
+      io.hydrate(row.payload);
+    } catch {
+      logFailure(classifyPersistError("runtime_state.hydrate", { message: "invalid payload", code: "invalid_payload" }));
+      return false;
+    }
+  }
   return true;
 }
 
 export async function pushStore() {
   if (!persistEnabled() || !io) return true;
   const client = serviceClient();
-  if (!client) return false;
+  if (!client) {
+    logFailure(classifyPersistError("runtime_state.push", { message: "service client missing", code: "missing_config" }));
+    return false;
+  }
   const { error } = await client.from("runtime_state").upsert(
     { property_slug: PROPERTY, payload: io.serialize(), updated_at: new Date().toISOString() },
     { onConflict: "property_slug" },
   );
   if (error) {
-    console.error("runtime_state push failed", error.code);
+    logFailure(classifyPersistError("runtime_state.push", error));
     return false;
   }
   return true;
 }
 
+export { PersistError };
+
 export async function withStore<T>(fn: () => T | Promise<T>): Promise<T> {
   if (!persistEnabled()) return await fn();
   return mutexLock(PROPERTY, async () => {
     const loaded = await pullStore();
-    if (!loaded) throw new PersistError("Inventory store could not be loaded from the database.");
+    if (!loaded) throw new PersistError(lastFailure ?? classifyPersistError("runtime_state.pull", null));
     const result = await fn();
     const saved = await pushStore();
-    if (!saved) throw new PersistError("Inventory store could not be saved.");
+    if (!saved) throw new PersistError(lastFailure ?? classifyPersistError("runtime_state.push", null));
     return result;
   });
 }
@@ -69,7 +100,7 @@ export async function withStoreRead<T>(fn: () => T | Promise<T>): Promise<T> {
   if (!persistEnabled()) return await fn();
   return mutexLock(PROPERTY, async () => {
     const loaded = await pullStore();
-    if (!loaded) throw new PersistError("Inventory store could not be loaded from the database.");
+    if (!loaded) throw new PersistError(lastFailure ?? classifyPersistError("runtime_state.pull", null));
     return fn();
   });
 }

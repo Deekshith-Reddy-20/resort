@@ -49,11 +49,14 @@ export function StaySearch({ embedded = false }: { embedded?: boolean }) {
     if (draft.attendees) setAttendees(draft.attendees);
     setReady(true);
     fetch("/api/public/config")
-      .then((r) => r.json())
-      .then((cfg) => {
+      .then(async (r) => {
+        const cfg = await r.json();
         if (typeof cfg.maxGuests === "number") setMaxGuests(cfg.maxGuests);
+        if (!r.ok || cfg.persistFailure) {
+          setError(cfg.missingSettings?.[0] ?? cfg.error ?? "Inventory is unavailable. Dates cannot be confirmed.");
+        }
       })
-      .catch(() => undefined);
+      .catch(() => setError("Inventory is unavailable. Dates cannot be confirmed."));
   }, []);
 
   useEffect(() => {
@@ -115,6 +118,9 @@ export function StaySearch({ embedded = false }: { embedded?: boolean }) {
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not search dates.");
+        if (data.persistFailure || data.blockCode === "persistence") {
+          throw new Error(data.blockMessage ?? data.error ?? "Inventory is unavailable. Dates cannot be confirmed.");
+        }
         setQuote(data);
       }
     } catch (err) {

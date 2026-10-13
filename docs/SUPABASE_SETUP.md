@@ -31,6 +31,8 @@ Paste each file into the Supabase SQL editor **in this order**. Do not run `RESE
 4. `supabase/migrations/20261013123000_runtime_state.sql`  
    `runtime_state(property_slug PK, payload jsonb, updated_at)`. RLS on, **no public policies**. `CREATE TABLE IF NOT EXISTS` — safe to re-run.
 
+**Live production (verified in Vercel logs):** `GET /api/public/config` and `POST /api/pricing/quote` fail with PostgREST `PGRST205` (`runtime_state` not in the schema cache). That is a missing table, not bad capacity data. Applying this file in the linked Supabase SQL editor is the required repair. Do not reset the database.
+
 Then run `supabase/verify_required_tables.sql` (read-only). You should see `admin_profiles`, `inventory_blocks`, `properties`, `runtime_state`, and related booking tables.
 
 This workspace did not apply them for you.

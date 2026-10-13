@@ -78,6 +78,7 @@ export function StayFlow() {
       .then(async (res) => {
         const data = await res.json();
         if (!res.ok) throw new Error(data.error ?? "Could not calculate a price.");
+        if (data.persistFailure) throw new Error(data.blockMessage ?? data.error ?? "Inventory is unavailable.");
         setQuote(data);
         setMissing(data.missingSettings ?? []);
       })
