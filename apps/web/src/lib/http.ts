@@ -2,12 +2,14 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { clientKey, rateLimit } from "./rate-limit";
 
+const noStore = { "Cache-Control": "private, no-store, max-age=0" };
+
 export function json(data: unknown, status = 200) {
-  return NextResponse.json(data, { status });
+  return NextResponse.json(data, { status, headers: noStore });
 }
 
 export function error(message: string, status = 400, code?: string, extra?: Record<string, unknown>) {
-  return NextResponse.json({ error: message, code, ...extra }, { status });
+  return NextResponse.json({ error: message, code, ...extra }, { status, headers: noStore });
 }
 
 export async function readJson<T>(req: Request, schema: z.ZodType<T>): Promise<{ ok: true; data: T } | { ok: false; response: NextResponse }> {

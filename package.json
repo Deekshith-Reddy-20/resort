@@ -22,6 +22,6 @@
     "android:lint": "apps/android/gradlew.bat -p apps/android lintDebug"
   },
   "engines": {
-    "node": ">=20"
+    "node": "20.x"
   }
 }

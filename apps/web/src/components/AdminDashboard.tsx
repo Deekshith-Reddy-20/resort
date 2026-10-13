@@ -227,6 +227,14 @@ export function AdminDashboard({ onLogout, onUnauthorized }: { onLogout: () => v
       <section className="rounded-3xl bg-white p-4 md:p-6">
         {error ? <p className="mb-4 text-dragon">{error}</p> : null}
         {tab === "Overview" ? (
+          <>
+            {String(overview.integrations.persistency ?? "").includes("memory") ? (
+              <p className="mb-4 rounded-2xl bg-ivory p-3 text-sm text-forest" role="status">
+                Inventory is in-process memory. On Vercel each serverless instance has its own store, so stays, holds, and
+                calendar rows do not persist across requests. Apply the Supabase migrations and set DATABASE_MODE=supabase
+                before treating preview bookings as real.
+              </p>
+            ) : null}
           <dl className="grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
             {[
               ["Today (IST)", overview.today],
@@ -249,6 +257,7 @@ export function AdminDashboard({ onLogout, onUnauthorized }: { onLogout: () => v
               </div>
             ))}
           </dl>
+          </>
         ) : null}
         {tab === "Calendar" ? (
           <div>

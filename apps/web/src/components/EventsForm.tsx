@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { PageHero } from "@/components/PageHero";
 
@@ -67,10 +68,10 @@ export function EventsForm() {
           <p>Overnight room use, catering, décor, and vendors are not included unless an issued quote says so.</p>
           <p>
             Already have a quote reference? Open{" "}
-            <a className="text-dragon underline" href="/events/quotes/VF-QTE">
-              /events/quotes/your-reference
-            </a>{" "}
-            and replace the last segment with the issued quote id.
+            <Link className="text-dragon underline" href="/events">
+              Events
+            </Link>{" "}
+            and visit <code>/events/quotes/&lt;issued-quote-id&gt;</code> after the owner sends a quotation.
           </p>
         </aside>
         {result ? (

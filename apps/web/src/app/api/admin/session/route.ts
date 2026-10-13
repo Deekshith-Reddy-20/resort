@@ -23,7 +23,12 @@ export async function POST(req: Request) {
   }
   const token = signStaff({ email: parsed.data.email, role: "owner", name: "Owner" });
   const res = json({ ok: true, role: "owner" });
-  res.cookies.set(STAFF_COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/", secure: process.env.NODE_ENV === "production" });
+  res.cookies.set(STAFF_COOKIE, token, {
+    httpOnly: true,
+    sameSite: "lax",
+    path: "/",
+    secure: process.env.NODE_ENV === "production" || Boolean(process.env.VERCEL),
+  });
   return res;
 }
 

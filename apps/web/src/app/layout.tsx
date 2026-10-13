@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Outfit } from "next/font/google";
 import { PublicChrome } from "@/components/PublicChrome";
+import { publicSiteUrl } from "@/lib/site";
 import "./globals.css";
 
 const serif = Cormorant_Garamond({
@@ -14,7 +15,7 @@ const sans = Outfit({
   variable: "--font-sans",
 });
 
-const site = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const site = publicSiteUrl();
 
 export const metadata: Metadata = {
   metadataBase: new URL(site),
