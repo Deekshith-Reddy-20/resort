@@ -32,7 +32,7 @@ Date: 13 October 2026 (local). Environment: developer workstation, then Vercel p
 
 - `apps/web/src/lib/site.ts`, `http.ts`, `layout.tsx`, `sitemap.ts`, `robots.ts`, `next.config.ts`, `vercel.json`
 - `apps/web/src/app/api/admin/session/route.ts`, `AdminDashboard.tsx`
-- `.nvmrc`, root/`apps/web` `package.json` engines `20.x`
+- `.nvmrc`, root/`apps/web` `package.json` engines `24.x`
 - `.env.example`
 - `apps/web/tests/site.test.ts`
 - This file plus `VERCEL_PREVIEW_DEPLOYMENT.md`, `VERCEL_ENVIRONMENT_VARIABLES.md`

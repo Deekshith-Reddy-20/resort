@@ -41,7 +41,7 @@ Connect Git: `Deekshith-Reddy-20/resort`, branch `main`.
 | Install Command | `cd ../.. && npm ci` (also in `apps/web/vercel.json`) |
 | Build Command | `cd ../.. && npm run build -w @vfarms/web` |
 | Output | Next.js default (do **not** set static export) |
-| Node.js | `20.x` (`.nvmrc` and `engines`) |
+| Node.js | `24.x` (`.nvmrc` and `engines`) |
 | Skip Deployments | Off for `main` until you want them |
 
 Do not set an Output Directory manually. Do not enable `next export`.
