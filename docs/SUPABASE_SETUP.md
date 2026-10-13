@@ -20,16 +20,18 @@ Auth: enable Email provider. Add the Vercel origin under Authentication → URL 
 
 ## Apply migrations
 
-In order, from `supabase/migrations/`:
+Paste each file into the Supabase SQL editor **in this order**. Do not run `RESET`, `DROP DATABASE`, or delete `public` data.
 
-1. `20261012120000_vfarms_core.sql` — property, inventory, bookings, `admin_profiles`, RLS, `vfarms_inventory_guard`
-2. `20261012163000_stay_commercial_draft.sql`
-3. `20261012193000_room_photographs.sql`
-4. `20261013123000_runtime_state.sql` — serverless JSON snapshot (`runtime_state`)
+1. `supabase/migrations/20261012120000_vfarms_core.sql`  
+   Creates types (`staff_role` includes `owner`, `admin`, `reservations`, `operations`, `content`), `properties` (`room_count = 5`, `booking_enabled` default false, `rates_published` default false), `inventory_blocks` plus `vfarms_inventory_guard` overlap trigger, `stay_bookings`, `event_enquiries`, `admin_profiles(id, role, display_name)`, payments, RLS. Safe on a **new** schema; will error if types/tables already exist — skip this file if `properties` already exists.
+2. `supabase/migrations/20261012163000_stay_commercial_draft.sql`  
+   Adds `draft_settings` / `published_settings` / `stay_config_live` on `properties` (`IF NOT EXISTS`). Safe to re-run.
+3. `supabase/migrations/20261012193000_room_photographs.sql`  
+   Updates room image paths only. Does not drop rows. Safe to re-run.
+4. `supabase/migrations/20261013123000_runtime_state.sql`  
+   `runtime_state(property_slug PK, payload jsonb, updated_at)`. RLS on, **no public policies**. `CREATE TABLE IF NOT EXISTS` — safe to re-run.
 
-In the Supabase SQL editor, paste each file in order. They are additive (`IF NOT EXISTS` where possible). Do not run a database reset.
-
-Then run `supabase/verify_required_tables.sql`. You should see `admin_profiles`, `inventory_blocks`, `properties`, `runtime_state`, and related booking tables.
+Then run `supabase/verify_required_tables.sql` (read-only). You should see `admin_profiles`, `inventory_blocks`, `properties`, `runtime_state`, and related booking tables.
 
 This workspace did not apply them for you.
 

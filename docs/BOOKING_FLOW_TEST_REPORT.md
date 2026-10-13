@@ -26,7 +26,9 @@ Commands:
 - `npm run lint -w @vfarms/web`
 - `npm run build -w @vfarms/web`
 
-**This session:** `npm test` — 43 web tests passed, 12 inventory tests passed. `npm run typecheck` passed. `npm run lint -w @vfarms/web` passed. `npm run build -w @vfarms/web` compiled successfully.
+Prior session: 46 web + 12 inventory unit tests, typecheck, lint, and web build passed on `8f6a279`.
+
+**This follow-up:** production `GET /api/admin/session` returned `configured: true`, `method: "supabase"`. Production `GET /api/public/config` returned **HTTP 500** (empty body) — persist pull is failing, almost certainly because `runtime_state` is not applied yet. Live table/login/Razorpay still unverified. Checkout remains unpublished.
 
 Covered in unit tests (mocked / in-memory store, no live Razorpay, no production data):
 

@@ -9,6 +9,7 @@ import { withLock as mutexLock } from "./mutex";
 import { persistEnabled, pullStore, pushStore, registerStoreIo } from "./persist";
 import { emptyCommercial, stayConfigGaps, type CommercialSettings } from "./commercial";
 import { persistenceMessage } from "./hosted-config";
+import { supabaseServiceKey, supabaseUrl } from "./supabase-admin";
 import { BRAND, FAQS, GALLERY, POLICIES, ROOMS } from "./content";
 
 const PROPERTY_ID = process.env.PROPERTY_ID ?? "vfarms-hyderabad";
@@ -1515,8 +1516,8 @@ export function addMaintenance(startDate: string, endDate: string, reason: strin
 export function integrationStatus() {
   return {
     databaseMode: persistEnabled() ? "supabase" : (process.env.DATABASE_MODE ?? "memory"),
-    supabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
-    supabaseService: Boolean(process.env.SUPABASE_SERVICE_ROLE_KEY),
+    supabaseUrl: Boolean(supabaseUrl()),
+    supabaseService: Boolean(supabaseServiceKey()),
     staffSecret: Boolean(process.env.STAFF_SESSION_SECRET),
     razorpayKeyId: Boolean(process.env.RAZORPAY_KEY_ID),
     razorpaySecret: Boolean(process.env.RAZORPAY_KEY_SECRET),
