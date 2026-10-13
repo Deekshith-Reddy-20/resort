@@ -176,7 +176,7 @@ export function StayFlow() {
           {quoteLoading ? <p className="text-sm text-muted">Calculating availability and price…</p> : null}
           {quote && missing.length > 0 ? (
             <Alert title="Owner settings still required">
-              <p>Online booking stays disabled until these published settings exist. Staff can complete them in Operations → Pricing.</p>
+              <p>Online booking stays disabled until these published settings exist. Authorized owner or admin staff complete them in Admin → Pricing, then publish.</p>
               <ul className="mt-3 list-disc space-y-1 pl-5">
                 {missing.map((item) => (
                   <li key={item}>{item}</li>

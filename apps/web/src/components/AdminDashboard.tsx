@@ -85,7 +85,8 @@ const ALL_MODULES = [
   "Audit",
 ] as const;
 
-function modulesFor(role: string) {
+function modulesFor(role: string | null) {
+  if (!role) return [];
   if (role === "owner" || role === "admin") return [...ALL_MODULES];
   if (role === "reservations") return ["Overview", "Calendar", "Stays", "Events"];
   if (role === "operations") return ["Overview", "Calendar", "Operations"];
@@ -101,7 +102,7 @@ export function AdminDashboard({ onLogout, onUnauthorized }: { onLogout: () => v
   const [phase, setPhase] = useState<"loading" | "ready" | "error">("loading");
   const [stayQuery, setStayQuery] = useState("");
   const [stayStatus, setStayStatus] = useState("all");
-  const [role, setRole] = useState("owner");
+  const [role, setRole] = useState<string | null>(null);
   const [selectedStay, setSelectedStay] = useState<Overview["staysList"][number] | null>(null);
   const modules = modulesFor(role);
 
@@ -133,9 +134,9 @@ export function AdminDashboard({ onLogout, onUnauthorized }: { onLogout: () => v
     fetch("/api/admin/session")
       .then((r) => r.json())
       .then((s) => {
-        if (s.role) setRole(s.role);
+        setRole(typeof s.role === "string" && s.role ? s.role : "unknown");
       })
-      .catch(() => undefined);
+      .catch(() => setRole("unknown"));
     load();
     const tick = () => {
       if (document.visibilityState === "visible") load();
@@ -415,6 +416,10 @@ export function AdminDashboard({ onLogout, onUnauthorized }: { onLogout: () => v
         ) : null}
         {tab === "Pricing" ? (
           <div className="space-y-6">
+            <h2 className="font-serif text-2xl text-forest">Stay pricing</h2>
+            <p className="text-sm text-muted">
+              Owner or admin only. Save a complete whole-property draft, then Publish. The public /stays page uses the published snapshot. Leave checkout unpublished until rates, tax, deposit, capacity, nights, times, cancellation text, and policy confirmations are the owner&apos;s real values.
+            </p>
             <PricingForm onDone={load} />
             <h3 className="font-serif text-2xl text-forest">Event packages</h3>
             <p className="text-sm text-muted">Templates store intended event types and deposit basis. They are not live prices until a quote is issued.</p>
@@ -792,41 +797,61 @@ function rupeeField(minor: number | null) {
   return minor == null ? "" : String(minor / 100);
 }
 
+function draftFieldsFromState(d: Record<string, unknown> = {}) {
+  return {
+    weekday: rupeeField(typeof d.weekdayMinor === "number" ? d.weekdayMinor : null),
+    weekend: rupeeField(typeof d.weekendMinor === "number" ? d.weekendMinor : null),
+    taxBps: d.taxBps == null ? "" : String(d.taxBps),
+    depositBps: d.depositBps == null ? "" : String(d.depositBps),
+    maxGuests: d.maxGuests == null ? "" : String(d.maxGuests),
+    minNights: d.minNights == null ? "" : String(d.minNights),
+    maxNights: d.maxNights == null ? "" : String(d.maxNights),
+    checkInTime: typeof d.checkInTime === "string" ? d.checkInTime : "",
+    checkOutTime: typeof d.checkOutTime === "string" ? d.checkOutTime : "",
+    cancellationSummary: typeof d.cancellationSummary === "string" ? d.cancellationSummary : "",
+    holdMinutes: String(typeof d.holdMinutes === "number" ? d.holdMinutes : 15),
+    minAdvanceDays: d.minAdvanceDays == null ? "" : String(d.minAdvanceDays),
+    maxAdvanceDays: d.maxAdvanceDays == null ? "" : String(d.maxAdvanceDays),
+    closedToArrival: Array.isArray(d.closedToArrival) ? d.closedToArrival.join(",") : "",
+    termsConfirmed: d.termsConfirmed ? "on" : "",
+    privacyConfirmed: d.privacyConfirmed ? "on" : "",
+    seasonal: JSON.stringify(d.seasonal ?? []),
+  };
+}
+
 function PricingForm({ onDone }: { onDone: () => void }) {
   const [notice, setNotice] = useState<string | null>(null);
   const [gaps, setGaps] = useState<string[]>([]);
   const [live, setLive] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  function applyState(data: { draft?: Record<string, unknown>; live?: boolean; draftGaps?: string[]; missingSettings?: string[] }) {
+    if (data.draft) setDraft(draftFieldsFromState(data.draft));
+    setLive(Boolean(data.live));
+    setGaps(data.missingSettings ?? data.draftGaps ?? []);
+  }
 
   useEffect(() => {
     fetch("/api/admin/settings")
-      .then((r) => r.json())
-      .then((data) => {
-        const d = data.draft ?? {};
-        setLive(Boolean(data.live));
-        setGaps(data.draftGaps ?? []);
-        setDraft({
-          weekday: rupeeField(d.weekdayMinor),
-          weekend: rupeeField(d.weekendMinor),
-          taxBps: d.taxBps == null ? "" : String(d.taxBps),
-          depositBps: d.depositBps == null ? "" : String(d.depositBps),
-          maxGuests: d.maxGuests == null ? "" : String(d.maxGuests),
-          minNights: d.minNights == null ? "" : String(d.minNights),
-          maxNights: d.maxNights == null ? "" : String(d.maxNights),
-          checkInTime: d.checkInTime ?? "",
-          checkOutTime: d.checkOutTime ?? "",
-          cancellationSummary: d.cancellationSummary ?? "",
-          holdMinutes: String(d.holdMinutes ?? 15),
-          minAdvanceDays: d.minAdvanceDays == null ? "" : String(d.minAdvanceDays),
-          maxAdvanceDays: d.maxAdvanceDays == null ? "" : String(d.maxAdvanceDays),
-          closedToArrival: (d.closedToArrival ?? []).join(","),
-          termsConfirmed: d.termsConfirmed ? "on" : "",
-          privacyConfirmed: d.privacyConfirmed ? "on" : "",
-          seasonal: JSON.stringify(d.seasonal ?? []),
-        });
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) {
+          setLoadError(data.error ?? "Could not load stay settings.");
+          return;
+        }
+        setLoadError(null);
+        applyState(data);
       })
-      .catch(() => setNotice("Could not load stay settings."));
+      .catch(() => setLoadError("Could not load stay settings."));
   }, []);
+
+  function optionalInt(raw: string, label: string) {
+    if (raw === "") return { ok: true as const, value: null };
+    const n = Number(raw);
+    if (!Number.isFinite(n) || !Number.isInteger(n)) return { ok: false as const, error: `${label} must be a whole number.` };
+    return { ok: true as const, value: n };
+  }
 
   async function send(action: "save-draft" | "publish" | "unpublish", e?: FormEvent<HTMLFormElement>) {
     e?.preventDefault();
@@ -844,23 +869,47 @@ function PricingForm({ onDone }: { onDone: () => void }) {
             nightlyMinor: row.nightlyMinor ?? Math.round(Number(row.nightlyInr) * 100),
           }));
         } catch {
-          setNotice("Seasonal rates must be JSON: [{startDate,endDate,nightlyInr}]");
+          setNotice("Seasonal rates must be JSON: [{startDate,endDate,nightlyInr}]. Leave [] if none.");
           return;
         }
       }
-      body.weekdayMinor = draft.weekday ? Math.round(Number(draft.weekday) * 100) : null;
-      body.weekendMinor = draft.weekend ? Math.round(Number(draft.weekend) * 100) : null;
-      body.taxBps = draft.taxBps === "" ? null : Number(draft.taxBps);
-      body.depositBps = draft.depositBps === "" ? null : Number(draft.depositBps);
-      body.maxGuests = draft.maxGuests === "" ? null : Number(draft.maxGuests);
-      body.minNights = draft.minNights === "" ? null : Number(draft.minNights);
-      body.maxNights = draft.maxNights === "" ? null : Number(draft.maxNights);
+      const weekday = draft.weekday === "" ? null : Math.round(Number(draft.weekday) * 100);
+      const weekend = draft.weekend === "" ? null : Math.round(Number(draft.weekend) * 100);
+      if (draft.weekday !== "" && !Number.isFinite(weekday)) {
+        setNotice("Weekday INR must be a number.");
+        return;
+      }
+      if (draft.weekend !== "" && !Number.isFinite(weekend)) {
+        setNotice("Weekend INR must be a number.");
+        return;
+      }
+      const tax = optionalInt(draft.taxBps ?? "", "Tax bps");
+      const deposit = optionalInt(draft.depositBps ?? "", "Deposit bps");
+      const guests = optionalInt(draft.maxGuests ?? "", "Max guests");
+      const minN = optionalInt(draft.minNights ?? "", "Min nights");
+      const maxN = optionalInt(draft.maxNights ?? "", "Max nights");
+      const hold = optionalInt(draft.holdMinutes || "15", "Hold minutes");
+      const minAdv = optionalInt(draft.minAdvanceDays ?? "", "Min advance days");
+      const maxAdv = optionalInt(draft.maxAdvanceDays ?? "", "Max advance days");
+      const ints = [tax, deposit, guests, minN, maxN, hold, minAdv, maxAdv];
+      const bad = ints.find((item) => !item.ok);
+      if (bad && !bad.ok) {
+        setNotice(bad.error);
+        return;
+      }
+      body.weekdayMinor = weekday;
+      body.weekendMinor = weekend;
+      body.taxBps = tax.ok ? tax.value : null;
+      body.depositBps = deposit.ok ? deposit.value : null;
+      body.maxGuests = guests.ok ? guests.value : null;
+      body.minNights = minN.ok ? minN.value : null;
+      body.maxNights = maxN.ok ? maxN.value : null;
       body.checkInTime = draft.checkInTime || null;
       body.checkOutTime = draft.checkOutTime || null;
       body.cancellationSummary = draft.cancellationSummary || null;
-      body.holdMinutes = Number(draft.holdMinutes || 15);
-      body.minAdvanceDays = draft.minAdvanceDays === "" ? null : Number(draft.minAdvanceDays);
-      body.maxAdvanceDays = draft.maxAdvanceDays === "" ? null : Number(draft.maxAdvanceDays);
+      body.holdMinutes = hold.ok && hold.value != null ? hold.value : 15;
+      body.minAdvanceDays = minAdv.ok ? minAdv.value : null;
+      body.maxAdvanceDays = maxAdv.ok ? maxAdv.value : null;
       body.closedToArrival = (draft.closedToArrival ?? "")
         .split(",")
         .map((s) => s.trim())
@@ -874,35 +923,56 @@ function PricingForm({ onDone }: { onDone: () => void }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    const data = await res.json();
-    setGaps(data.missingSettings ?? data.draftGaps ?? []);
-    setLive(Boolean(data.live));
-    if (!res.ok) setNotice(data.error ?? "Could not save.");
-    else setNotice(action === "publish" ? "Published." : action === "unpublish" ? "Unpublished." : "Draft saved.");
+    const data = await res.json().catch(() => ({}));
+    applyState(data);
+    if (res.status === 401) {
+      setNotice("Session expired. Sign in again.");
+      return;
+    }
+    if (res.status === 403) {
+      setNotice("Only owner or admin staff can save or publish stay pricing.");
+      return;
+    }
+    if (res.status === 422) {
+      setNotice("Draft saved in the database. Publish is blocked until every required field listed below is valid. Checkout stays off.");
+      onDone();
+      return;
+    }
+    if (!res.ok) {
+      setNotice(data.error ?? "Could not save.");
+      return;
+    }
+    setNotice(action === "publish" ? "Published. Public stays now read this snapshot." : action === "unpublish" ? "Unpublished. Public checkout is off." : "Draft saved. Refresh this tab to confirm it reloads from the database. Checkout stays off until you publish.");
     onDone();
+  }
+
+  if (loadError) {
+    return <p className="mt-4 text-sm text-dragon">{loadError}</p>;
   }
 
   return (
     <form onSubmit={(e) => send("save-draft", e)} className="mt-6 grid gap-3 text-sm md:grid-cols-2">
-      <p className="col-span-full text-muted">Whole-property INR per night. Live booking uses only the published snapshot.</p>
+      <p className="col-span-full text-muted">
+        Whole-property INR per night for all five rooms together. Public booking reads only the published snapshot, never this draft.
+      </p>
       <p className="col-span-full text-xs uppercase">{live ? "Live booking: on" : "Live booking: off"}</p>
-      <label>Weekday INR<input value={draft.weekday ?? ""} onChange={(e) => setDraft({ ...draft, weekday: e.target.value })} type="number" className="field" /></label>
-      <label>Weekend INR<input value={draft.weekend ?? ""} onChange={(e) => setDraft({ ...draft, weekend: e.target.value })} type="number" className="field" /></label>
-      <label>Tax bps<input value={draft.taxBps ?? ""} onChange={(e) => setDraft({ ...draft, taxBps: e.target.value })} type="number" className="field" /></label>
-      <label>Deposit bps<input value={draft.depositBps ?? ""} onChange={(e) => setDraft({ ...draft, depositBps: e.target.value })} type="number" className="field" /></label>
-      <label>Max guests<input value={draft.maxGuests ?? ""} onChange={(e) => setDraft({ ...draft, maxGuests: e.target.value })} type="number" className="field" /></label>
-      <label>Min nights<input value={draft.minNights ?? ""} onChange={(e) => setDraft({ ...draft, minNights: e.target.value })} type="number" className="field" /></label>
-      <label>Max nights<input value={draft.maxNights ?? ""} onChange={(e) => setDraft({ ...draft, maxNights: e.target.value })} type="number" className="field" /></label>
-      <label>Hold minutes<input value={draft.holdMinutes ?? "15"} onChange={(e) => setDraft({ ...draft, holdMinutes: e.target.value })} type="number" className="field" /></label>
-      <label>Min advance days<input value={draft.minAdvanceDays ?? ""} onChange={(e) => setDraft({ ...draft, minAdvanceDays: e.target.value })} type="number" className="field" /></label>
-      <label>Max advance days<input value={draft.maxAdvanceDays ?? ""} onChange={(e) => setDraft({ ...draft, maxAdvanceDays: e.target.value })} type="number" className="field" /></label>
-      <label className="col-span-full">Closed-to-arrival dates (YYYY-MM-DD, comma-separated)<input value={draft.closedToArrival ?? ""} onChange={(e) => setDraft({ ...draft, closedToArrival: e.target.value })} className="field" /></label>
-      <label>Check-in<input value={draft.checkInTime ?? ""} onChange={(e) => setDraft({ ...draft, checkInTime: e.target.value })} type="time" className="field" /></label>
-      <label>Check-out<input value={draft.checkOutTime ?? ""} onChange={(e) => setDraft({ ...draft, checkOutTime: e.target.value })} type="time" className="field" /></label>
-      <label className="col-span-full">Cancellation<textarea value={draft.cancellationSummary ?? ""} onChange={(e) => setDraft({ ...draft, cancellationSummary: e.target.value })} className="field" /></label>
-      <label className="col-span-full">Seasonal JSON<textarea value={draft.seasonal ?? "[]"} onChange={(e) => setDraft({ ...draft, seasonal: e.target.value })} className="field" /></label>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={draft.termsConfirmed === "on"} onChange={(e) => setDraft({ ...draft, termsConfirmed: e.target.checked ? "on" : "" })} /> Terms apply</label>
-      <label className="flex items-center gap-2"><input type="checkbox" checked={draft.privacyConfirmed === "on"} onChange={(e) => setDraft({ ...draft, privacyConfirmed: e.target.checked ? "on" : "" })} /> Privacy applies</label>
+      <label htmlFor="pricing-weekday">Weekday nightly rate (INR)<input id="pricing-weekday" value={draft.weekday ?? ""} onChange={(e) => setDraft({ ...draft, weekday: e.target.value })} type="number" min={1} step={1} className="field" /></label>
+      <label htmlFor="pricing-weekend">Weekend nightly rate (INR)<input id="pricing-weekend" value={draft.weekend ?? ""} onChange={(e) => setDraft({ ...draft, weekend: e.target.value })} type="number" min={1} step={1} className="field" /></label>
+      <label htmlFor="pricing-tax">Tax (basis points, 0 = no tax)<input id="pricing-tax" value={draft.taxBps ?? ""} onChange={(e) => setDraft({ ...draft, taxBps: e.target.value })} type="number" min={0} max={10000} className="field" /></label>
+      <label htmlFor="pricing-deposit">Deposit due now (basis points, 10000 = pay in full)<input id="pricing-deposit" value={draft.depositBps ?? ""} onChange={(e) => setDraft({ ...draft, depositBps: e.target.value })} type="number" min={0} max={10000} className="field" /></label>
+      <label htmlFor="pricing-guests">Maximum overnight guests<input id="pricing-guests" value={draft.maxGuests ?? ""} onChange={(e) => setDraft({ ...draft, maxGuests: e.target.value })} type="number" min={1} className="field" /></label>
+      <label htmlFor="pricing-min-nights">Minimum nights<input id="pricing-min-nights" value={draft.minNights ?? ""} onChange={(e) => setDraft({ ...draft, minNights: e.target.value })} type="number" min={1} className="field" /></label>
+      <label htmlFor="pricing-max-nights">Maximum nights<input id="pricing-max-nights" value={draft.maxNights ?? ""} onChange={(e) => setDraft({ ...draft, maxNights: e.target.value })} type="number" min={1} className="field" /></label>
+      <label htmlFor="pricing-hold">Hold minutes (5–120)<input id="pricing-hold" value={draft.holdMinutes ?? "15"} onChange={(e) => setDraft({ ...draft, holdMinutes: e.target.value })} type="number" min={5} max={120} className="field" /></label>
+      <label htmlFor="pricing-min-adv">Min advance days (optional)<input id="pricing-min-adv" value={draft.minAdvanceDays ?? ""} onChange={(e) => setDraft({ ...draft, minAdvanceDays: e.target.value })} type="number" min={0} className="field" /></label>
+      <label htmlFor="pricing-max-adv">Max advance days (optional)<input id="pricing-max-adv" value={draft.maxAdvanceDays ?? ""} onChange={(e) => setDraft({ ...draft, maxAdvanceDays: e.target.value })} type="number" min={1} className="field" /></label>
+      <label htmlFor="pricing-cta" className="col-span-full">Closed-to-arrival dates (optional, YYYY-MM-DD, comma-separated)<input id="pricing-cta" value={draft.closedToArrival ?? ""} onChange={(e) => setDraft({ ...draft, closedToArrival: e.target.value })} className="field" /></label>
+      <label htmlFor="pricing-checkin">Check-in time<input id="pricing-checkin" value={draft.checkInTime ?? ""} onChange={(e) => setDraft({ ...draft, checkInTime: e.target.value })} type="time" className="field" /></label>
+      <label htmlFor="pricing-checkout">Check-out time<input id="pricing-checkout" value={draft.checkOutTime ?? ""} onChange={(e) => setDraft({ ...draft, checkOutTime: e.target.value })} type="time" className="field" /></label>
+      <label htmlFor="pricing-cancel" className="col-span-full">Cancellation and refund policy (at least 20 characters)<textarea id="pricing-cancel" value={draft.cancellationSummary ?? ""} onChange={(e) => setDraft({ ...draft, cancellationSummary: e.target.value })} className="field" /></label>
+      <label htmlFor="pricing-seasonal" className="col-span-full">Seasonal rates JSON (optional, [] if none)<textarea id="pricing-seasonal" value={draft.seasonal ?? "[]"} onChange={(e) => setDraft({ ...draft, seasonal: e.target.value })} className="field" /></label>
+      <label className="flex items-center gap-2"><input type="checkbox" checked={draft.termsConfirmed === "on"} onChange={(e) => setDraft({ ...draft, termsConfirmed: e.target.checked ? "on" : "" })} /> Confirm terms of stay apply at checkout</label>
+      <label className="flex items-center gap-2"><input type="checkbox" checked={draft.privacyConfirmed === "on"} onChange={(e) => setDraft({ ...draft, privacyConfirmed: e.target.checked ? "on" : "" })} /> Confirm privacy policy applies at checkout</label>
       {gaps.length ? <ul className="col-span-full list-disc pl-5 text-dragon">{gaps.map((g) => <li key={g}>{g}</li>)}</ul> : null}
       <div className="col-span-full flex flex-wrap gap-2">
         <button type="submit" className="btn-primary">Save draft</button>

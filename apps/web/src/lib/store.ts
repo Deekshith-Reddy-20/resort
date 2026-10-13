@@ -296,16 +296,22 @@ function hydrateDb(d: Db): Db {
   d.maintenance ??= [];
   d.audit ??= [];
   d.contacts ??= [];
-  if (d.settings?.draft) {
-    d.settings.draft.minAdvanceDays ??= null;
-    d.settings.draft.maxAdvanceDays ??= null;
-    d.settings.draft.closedToArrival ??= [];
-  }
-  if (d.settings?.published) {
+  const baseline = emptyDb().settings;
+  d.settings ??= baseline;
+  d.settings.draft = { ...emptyCommercial(), ...d.settings.draft };
+  d.settings.draft.minAdvanceDays ??= null;
+  d.settings.draft.maxAdvanceDays ??= null;
+  d.settings.draft.closedToArrival ??= [];
+  if (d.settings.published) {
+    d.settings.published = { ...emptyCommercial(), ...d.settings.published };
     d.settings.published.minAdvanceDays ??= null;
     d.settings.published.maxAdvanceDays ??= null;
     d.settings.published.closedToArrival ??= [];
+  } else {
+    d.settings.published = null;
   }
+  d.settings.live = Boolean(d.settings.live && d.settings.published);
+  d.settings.publishedAt ??= null;
   return d;
 }
 

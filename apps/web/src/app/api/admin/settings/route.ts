@@ -40,6 +40,7 @@ const draftSchema = z.object({
 export async function GET() {
   const staff = await currentStaff();
   if (!staff) return error("Unauthorized.", 401);
+  if (!can(staff.role, "pricing")) return error("Forbidden.", 403);
   try {
     return json(await runLockedRead(() => commercialState()));
   } catch (e) {
@@ -62,7 +63,12 @@ export async function POST(req: Request) {
       updateDraftSettings(patch, staff.email);
       if (action === "publish") {
         const result = publishStayConfig(staff.email);
-        if (!result.ok) return error(result.error, 422, "STAY_CONFIG_INCOMPLETE", { missingSettings: result.missingSettings });
+        if (!result.ok) {
+          return error(result.error, 422, "STAY_CONFIG_INCOMPLETE", {
+            missingSettings: result.missingSettings,
+            ...commercialState(),
+          });
+        }
         return json(result);
       }
       return json(commercialState());
