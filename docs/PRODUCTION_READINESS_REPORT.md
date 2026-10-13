@@ -10,7 +10,7 @@ Date: 13 October 2026. Do not treat Vercel **Ready** as a working booking backen
 | Vercel `deekshith10/resort` production Ready | PASS | `dpl_4bpFxHJFxcdkcZnDqd3X2L1j9mBo`, alias `resort-delta-nine.vercel.app` |
 | Deployed git SHA equals `HEAD` | BLOCKED | inspect JSON omitted git metadata |
 | Node 24.x / `apps/web` root | PASS | engines + `vercel.json` |
-| Live `GET /api/public/config` | FAIL | HTTP 503, `persistFailure.reason=missing_table`, code `PGRST205` |
+| Live `GET /api/public/config` | PASS (after `428d134` deploy) | HTTP 200 `persistencyReady: true` `persistFailure: null` `bookingEnabled: false` `maxGuests: null` |
 | Live `GET /api/admin/session` | PASS | `configured: true`, `method: "supabase"`, `authenticated: false` |
 | Homepage HTML | NOT RUN (browser UI) | Smoke after this change: `npm run verify:smoke` |
 
@@ -18,7 +18,7 @@ Date: 13 October 2026. Do not treat Vercel **Ready** as a working booking backen
 
 | Defect | Root cause | Fix in this pass |
 |---|---|---|
-| Homepage/`/stays` inventory error | Linked Supabase has no `public.runtime_state` (PostgREST `PGRST205`) | Cannot apply DDL from this agent. SQL + SQL Editor steps in `SUPABASE_SETUP.md`. |
+| Homepage/`/stays` inventory error | Linked Supabase had no `public.runtime_state` (`PGRST205`) | Table is now readable (`persistencyReady: true`). Keep applying `20261013140000_runtime_state_upsert.sql` if the lock function is still missing. |
 | Overnight capacity message | No published commercial snapshot (`maxGuests` null). Distinct from missing table. | Owner sets Max guests in admin Pricing, then publishes. No invented capacity. |
 | Staff auth previously unconfigured | Missing HMAC secret / alias mismatch | Already configured live (`method: supabase`). Logout cookie now matches Secure/SameSite. |
 | Availability search wrote `runtime_state` on every read | `searchAvailability`/`createStayQuote` used write lock (`withLock` always `pushStore`) | Switched to `runLockedRead`. |
@@ -64,8 +64,9 @@ See `docs/PRODUCTION_ENVIRONMENT_AUDIT.md`. Razorpay: absent. Checkout stays unp
 
 | Check | Status |
 |---|---|
-| `runtime_state` exists in production | FAIL |
-| App can read/write snapshot | BLOCKED until migration |
+| `runtime_state` exists in production | PASS — live config 200 after SQL (observed 13 Oct 2026 14:12 IST) |
+| App can read snapshot | PASS — `persistencyReady: true` |
+| App write-back | BLOCKED — no owner publish/write verified in this session |
 | Required seed rows | None |
 | Owner max guests | BLOCKED — set in admin Pricing, then publish |
 | DB failure treated as available | Code fix + unit test; live search still 503 until table exists |
@@ -101,7 +102,7 @@ See `docs/PRODUCTION_ENVIRONMENT_AUDIT.md`. Razorpay: absent. Checkout stays unp
 | Typecheck | PASS |
 | Lint | PASS |
 | Production build | PASS |
-| Production smoke | FAIL — missing `runtime_state` |
+| Production smoke (`npm run verify:smoke` after `428d134`) | PASS — `/`, `/stays`, config, staff session. Quote still unpublished. |
 
 ## 11. Production smoke
 
@@ -122,7 +123,7 @@ Recorded after commit/push if performed.
 
 ## 14. Blockers and risks
 
-- Production `runtime_state` missing (**blocks inventory**).
+- Inventory snapshot is readable. Overnight capacity and rates are still unpublished.
 - No published max guests (**blocks honest availability**).
 - No Razorpay test verification.
 - Rate limit and webhook dedupe are per instance until snapshot persist works.

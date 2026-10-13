@@ -109,6 +109,8 @@ describe("reservation service", () => {
     const quote = await createStayQuote({ checkIn: "2026-11-20", checkOut: "2026-11-22", guests: 2 });
     expect(quote.totalMinor).toBeNull();
     expect(quote.bookingEnabled).toBe(false);
+    expect(quote.available).toBe(false);
+    expect(quote.blockCode).toBe("unpublished");
   });
 
   it("rejects guest counts above published capacity", async () => {

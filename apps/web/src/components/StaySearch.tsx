@@ -210,7 +210,11 @@ export function StaySearch({ embedded = false }: { embedded?: boolean }) {
         {quote ? (
           <div className="rounded-2xl border border-stone bg-ivory p-4 text-sm">
             <p className="font-medium text-forest">
-              {quote.available ? (mode === "stay" ? "The estate is available for those dates." : "Those dates are currently free of confirmed stays, events, and closures.") : quote.availabilityReason ?? "Those dates are unavailable."}
+              {quote.available
+                ? mode === "stay"
+                  ? "The estate is available for those dates."
+                  : "Those dates are currently free of confirmed stays, events, and closures."
+                : quote.blockMessage ?? quote.reason ?? quote.availabilityReason ?? "Those dates are unavailable."}
             </p>
             {quote.blockMessage ? <p className="mt-2 text-forest/80">{quote.blockMessage}</p> : null}
             {quote.missingSettings && quote.missingSettings.length > 0 ? (

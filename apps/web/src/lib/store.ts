@@ -670,7 +670,8 @@ export async function createStayQuote(input: { checkIn: string; checkOut: string
   });
   const missingSettings = bookingBlockers();
   const windowIssue = stayWindowIssue(input.checkIn, live);
-  const available = availability.available && quote.available !== false && !windowIssue;
+  const available =
+    !missingSettings.length && availability.available && quote.available !== false && !windowIssue;
   let blockCode: "none" | "unpublished" | "persistence" | "unavailable" | "capacity" | "stay_rules" | "booking_window" = "none";
   let blockMessage: string | null = null;
   if (missingSettings.length) {

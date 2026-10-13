@@ -73,6 +73,7 @@ export function quoteStay(args: {
   if (!args.bookingEnabled || !args.ratePlan.published) {
     return {
       ...empty,
+      available: false,
       reason:
         "Stay rates are not published yet. Online booking stays disabled until the owner approves prices, taxes, and capacity.",
     };

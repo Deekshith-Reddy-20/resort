@@ -208,6 +208,29 @@ describe("pricing unpublished by default", () => {
     expect(quote.reason).toMatch(/capacity/i);
   });
 
+  it("does not mark unpublished rates as available", () => {
+    const quote = quoteStay({
+      checkIn: "2026-11-06",
+      checkOut: "2026-11-08",
+      guests: 2,
+      bookingEnabled: false,
+      ratePlan: {
+        currency: "INR",
+        weekdayMinor: null,
+        weekendMinor: null,
+        published: false,
+        minNights: null,
+        maxNights: null,
+        maxGuests: null,
+        taxBps: null,
+        depositBps: null,
+        weekendWeekdays: [0, 6],
+      },
+    });
+    expect(quote.available).toBe(false);
+    expect(quote.bookingEnabled).toBe(false);
+  });
+
   it("G14 prices each night from the matching seasonal exception", () => {
     const quote = quoteStay({
       checkIn: "2026-12-24",
