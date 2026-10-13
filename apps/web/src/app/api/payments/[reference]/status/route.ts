@@ -1,9 +1,10 @@
-import { error, json } from "@/lib/http";
+import { error, json, persistCatch } from "@/lib/http";
 import { db, runLockedRead } from "@/lib/store";
 
 export async function GET(_req: Request, ctx: { params: Promise<{ reference: string }> }) {
   const { reference } = await ctx.params;
-  return runLockedRead(() => {
+  try {
+  return await runLockedRead(() => {
   const payment = db().payments.find((p) => p.stayReference === reference || p.quoteReference === reference);
   const stay = db().stays.find((s) => s.reference === reference);
   const quote = db().quotes.find((q) => q.reference === reference);
@@ -19,4 +20,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ reference: str
     exception: payment?.exceptionCode ?? null,
   });
   });
+  } catch (e) {
+    return persistCatch(e, "Payment status could not be loaded.");
+  }
 }

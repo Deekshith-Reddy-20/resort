@@ -11,3 +11,7 @@ WHERE schemaname = 'public'
     'event_enquiries'
   )
 ORDER BY tablename;
+
+SELECT proname
+FROM pg_proc
+WHERE proname = 'upsert_runtime_state';

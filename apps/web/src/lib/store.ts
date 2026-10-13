@@ -616,6 +616,17 @@ function evaluateAvailability(input: {
   endDate: string;
   guests?: number;
 }) {
+  const persistIssue = persistenceMessage();
+  if (persistIssue) {
+    return {
+      propertyId: PROPERTY_ID,
+      product: input.product,
+      available: false,
+      reason: persistIssue,
+      guests: input.guests ?? null,
+      capacityConfigured: false,
+    };
+  }
   const proposed =
     input.product === "stay"
       ? { kind: "stay" as const, startDate: input.startDate, endDate: input.endDate }
@@ -637,11 +648,11 @@ export async function searchAvailability(input: {
   endDate: string;
   guests?: number;
 }) {
-  return withLock(PROPERTY_ID, async () => evaluateAvailability(input));
+  return runLockedRead(() => evaluateAvailability(input));
 }
 
 export async function createStayQuote(input: { checkIn: string; checkOut: string; guests: number }) {
-  return withLock(PROPERTY_ID, async () => {
+  return runLockedRead(async () => {
   const availability = evaluateAvailability({
     product: "stay",
     startDate: input.checkIn,
@@ -1478,6 +1489,7 @@ function envInt(name: string): number | null {
 
 function bootstrapCommercialFromEnv(target: Db) {
   if (process.env.VITEST || process.env.NODE_ENV === "test") return;
+  if (process.env.VERCEL) return;
   if (process.env.DEV_STAY_CONFIG_PUBLISH !== "true") return;
   const weekday = envInt("DEV_WEEKDAY_MINOR") ?? (envInt("DEV_WEEKDAY_INR") != null ? envInt("DEV_WEEKDAY_INR")! * 100 : null);
   const weekend = envInt("DEV_WEEKEND_MINOR") ?? (envInt("DEV_WEEKEND_INR") != null ? envInt("DEV_WEEKEND_INR")! * 100 : null);

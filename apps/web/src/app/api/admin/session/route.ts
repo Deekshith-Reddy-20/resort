@@ -60,6 +60,6 @@ export async function GET() {
 
 export async function DELETE() {
   const res = json({ ok: true });
-  res.cookies.set(STAFF_COOKIE, "", { httpOnly: true, path: "/", maxAge: 0 });
+  res.cookies.set(STAFF_COOKIE, "", { ...cookieOptions(), maxAge: 0 });
   return res;
 }

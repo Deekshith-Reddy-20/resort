@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { email, error, isoDate, json, personName, phone, readJson } from "@/lib/http";
+import { email, error, isoDate, json, persistCatch, personName, phone, readJson } from "@/lib/http";
 import { createStayHold } from "@/lib/store";
 
 const schema = z.object({
@@ -16,11 +16,15 @@ const schema = z.object({
 export async function POST(req: Request) {
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
-  const result = await createStayHold(parsed.data);
-  if (!result.ok) {
-    return error(result.error, 409, "STAY_HOLD_BLOCKED", {
-      missingSettings: "missingSettings" in result ? result.missingSettings : undefined,
-    });
+  try {
+    const result = await createStayHold(parsed.data);
+    if (!result.ok) {
+      return error(result.error, 409, "STAY_HOLD_BLOCKED", {
+        missingSettings: "missingSettings" in result ? result.missingSettings : undefined,
+      });
+    }
+    return json(result, 201);
+  } catch (e) {
+    return persistCatch(e, "Hold could not be created.");
   }
-  return json(result, 201);
 }

@@ -1,4 +1,4 @@
-import { error, json } from "@/lib/http";
+import { error, json, persistCatch } from "@/lib/http";
 import { currentStaff } from "@/lib/staff";
 import { adminOverview, runLockedRead } from "@/lib/store";
 
@@ -8,7 +8,6 @@ export async function GET() {
   try {
     return json(await runLockedRead(() => adminOverview()));
   } catch (e) {
-    const message = e instanceof Error ? e.message : "Operations data failed to load.";
-    return error(message, 500);
+    return persistCatch(e, "Operations data failed to load.");
   }
 }

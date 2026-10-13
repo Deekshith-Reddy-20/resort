@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { error, json, readJson } from "@/lib/http";
+import { error, json, persistCatch, readJson } from "@/lib/http";
 import { razorpayConfigured, verifyCheckoutSignature } from "@/lib/payments";
 import { confirmVerifiedPayment } from "@/lib/store";
 
@@ -22,10 +22,14 @@ export async function POST(req: Request) {
     secret,
   });
   if (!ok) return error("Invalid payment signature.", 400, "INVALID_SIGNATURE");
-  const result = await confirmVerifiedPayment({
-    orderId: parsed.data.razorpay_order_id,
-    paymentId: parsed.data.razorpay_payment_id,
-  });
-  if (result.status === "unknown_order") return error("No matching payment order.", 404, "UNKNOWN_ORDER");
-  return json(result);
+  try {
+    const result = await confirmVerifiedPayment({
+      orderId: parsed.data.razorpay_order_id,
+      paymentId: parsed.data.razorpay_payment_id,
+    });
+    if (result.status === "unknown_order") return error("No matching payment order.", 404, "UNKNOWN_ORDER");
+    return json(result);
+  } catch (e) {
+    return persistCatch(e, "Payment confirmation could not be stored.");
+  }
 }

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { can, currentStaff } from "@/lib/staff";
-import { error, json, readJson } from "@/lib/http";
+import { error, json, persistCatch, readJson } from "@/lib/http";
 import { runLocked, saveFaqDraft, updateCms } from "@/lib/store";
 
 const schema = z.object({
@@ -27,11 +27,15 @@ export async function POST(req: Request) {
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
   const { faqQ, faqA, faqPublished, ...cmsPatch } = parsed.data;
-  return json(
-    await runLocked(() => {
-      const cms = updateCms(cmsPatch, staff.email);
-      const faqs = faqQ && faqA ? saveFaqDraft({ q: faqQ, a: faqA, published: Boolean(faqPublished) }, staff.email) : undefined;
-      return { cms, faqs };
-    }),
-  );
+  try {
+    return json(
+      await runLocked(() => {
+        const cms = updateCms(cmsPatch, staff.email);
+        const faqs = faqQ && faqA ? saveFaqDraft({ q: faqQ, a: faqA, published: Boolean(faqPublished) }, staff.email) : undefined;
+        return { cms, faqs };
+      }),
+    );
+  } catch (e) {
+    return persistCatch(e, "Content could not be saved.");
+  }
 }

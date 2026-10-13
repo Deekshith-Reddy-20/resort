@@ -19,7 +19,9 @@
     "test:e2e": "npm run test:e2e -w @vfarms/web",
     "test:api": "npm run test:api -w @vfarms/web",
     "android:assemble": "apps/android/gradlew.bat -p apps/android assembleDebug",
-    "android:lint": "apps/android/gradlew.bat -p apps/android lintDebug"
+    "android:lint": "apps/android/gradlew.bat -p apps/android lintDebug",
+    "verify:smoke": "node scripts/smoke-production.mjs",
+    "verify:readiness": "node scripts/production-readiness.mjs"
   },
   "engines": {
     "node": "24.x"

@@ -1,4 +1,4 @@
-import { error, json } from "@/lib/http";
+import { error, json, persistCatch } from "@/lib/http";
 import { currentStaff } from "@/lib/staff";
 import { propertyMonth, runLockedRead } from "@/lib/store";
 
@@ -14,5 +14,9 @@ export async function GET(req: Request) {
   if (monthIndex < 0 || monthIndex > 11 || !Number.isFinite(year)) {
     return error("Month must be YYYY-MM.", 400);
   }
-  return json(await runLockedRead(() => propertyMonth(year, monthIndex)));
+  try {
+    return json(await runLockedRead(() => propertyMonth(year, monthIndex)));
+  } catch (e) {
+    return persistCatch(e, "Calendar could not be loaded.");
+  }
 }

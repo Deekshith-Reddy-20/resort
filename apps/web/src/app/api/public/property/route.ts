@@ -1,6 +1,10 @@
-import { json } from "@/lib/http";
+import { json, persistCatch } from "@/lib/http";
 import { publicProperty, runLockedRead } from "@/lib/store";
 
 export async function GET() {
-  return json(await runLockedRead(() => publicProperty()));
+  try {
+    return json(await runLockedRead(() => publicProperty()));
+  } catch (e) {
+    return persistCatch(e, "Property could not be loaded.");
+  }
 }

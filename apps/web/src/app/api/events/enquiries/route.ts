@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { email, isoDate, json, personName, phone, readJson } from "@/lib/http";
+import { email, isoDate, json, persistCatch, personName, phone, readJson } from "@/lib/http";
 import { createEventEnquiry } from "@/lib/store";
 
 const schema = z.object({
@@ -18,6 +18,10 @@ const schema = z.object({
 export async function POST(req: Request) {
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
-  const result = await createEventEnquiry(parsed.data);
-  return json(result, 201);
+  try {
+    const result = await createEventEnquiry(parsed.data);
+    return json(result, 201);
+  } catch (e) {
+    return persistCatch(e, "Enquiry could not be stored.");
+  }
 }

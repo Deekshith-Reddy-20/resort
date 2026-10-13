@@ -1,6 +1,10 @@
-import { json } from "@/lib/http";
+import { json, persistCatch } from "@/lib/http";
 import { publicPolicies, runLockedRead } from "@/lib/store";
 
 export async function GET() {
-  return json(await runLockedRead(() => publicPolicies()));
+  try {
+    return json(await runLockedRead(() => publicPolicies()));
+  } catch (e) {
+    return persistCatch(e, "Policies could not be loaded.");
+  }
 }

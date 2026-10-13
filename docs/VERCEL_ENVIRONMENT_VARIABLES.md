@@ -84,7 +84,7 @@ Events: `payment.captured`, `payment.failed`. A Checkout success screen is not c
 
 | Name | Default | Purpose |
 |---|---|---|
-| `PROPERTY_TIMEZONE` | `Asia/Kolkata` | Documented timezone |
+| `PROPERTY_TIMEZONE` | unused | App timezone is hardcoded `Asia/Kolkata` |
 | `HOLD_MINUTES` | `15` | Hold length if unpublished snapshot has no value |
 | `RATE_LIMIT_MAX` | `60` | API throttle |
 | `RATE_LIMIT_WINDOW_MS` | `60000` | Throttle window |

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { email, json, personName, phone, readJson } from "@/lib/http";
+import { email, json, persistCatch, personName, phone, readJson } from "@/lib/http";
 import { addContact, runLocked } from "@/lib/store";
 
 const schema = z.object({
@@ -12,16 +12,20 @@ const schema = z.object({
 export async function POST(req: Request) {
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
-  await runLocked(() =>
-    addContact({
-      id: crypto.randomUUID(),
-      name: parsed.data.name,
-      email: parsed.data.email,
-      phone: parsed.data.phone,
-      message: parsed.data.message,
-      createdAt: new Date().toISOString(),
-    }),
-  );
+  try {
+    await runLocked(() =>
+      addContact({
+        id: crypto.randomUUID(),
+        name: parsed.data.name,
+        email: parsed.data.email,
+        phone: parsed.data.phone,
+        message: parsed.data.message,
+        createdAt: new Date().toISOString(),
+      }),
+    );
+  } catch (e) {
+    return persistCatch(e, "Message could not be stored.");
+  }
   const emailConfigured = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
   return json({
     ok: true,

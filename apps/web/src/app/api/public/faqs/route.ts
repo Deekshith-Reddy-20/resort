@@ -1,6 +1,10 @@
-import { json } from "@/lib/http";
+import { json, persistCatch } from "@/lib/http";
 import { publicFaqs, runLockedRead } from "@/lib/store";
 
 export async function GET() {
-  return json({ faqs: await runLockedRead(() => publicFaqs()) });
+  try {
+    return json({ faqs: await runLockedRead(() => publicFaqs()) });
+  } catch (e) {
+    return persistCatch(e, "FAQs could not be loaded.");
+  }
 }

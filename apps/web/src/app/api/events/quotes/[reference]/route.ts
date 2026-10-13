@@ -1,4 +1,4 @@
-import { error, json } from "@/lib/http";
+import { error, json, persistCatch } from "@/lib/http";
 import { db, lookupEnquiry, runLockedRead } from "@/lib/store";
 
 export async function GET(req: Request, ctx: { params: Promise<{ reference: string }> }) {
@@ -6,7 +6,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ reference: stri
   const url = new URL(req.url);
   const email = url.searchParams.get("email") ?? "";
   const phone = url.searchParams.get("phone") ?? "";
-  return runLockedRead(() => {
+  try {
+  return await runLockedRead(() => {
     const quote = db().quotes.find((q) => q.reference === reference);
     if (!quote) return error("Quote not found.", 404);
     const enquiry = db().events.find((e) => e.id === quote.enquiryId);
@@ -15,4 +16,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ reference: stri
     if (!verified) return error("Verification required.", 401);
     return json({ quote, enquiry: { reference: enquiry.reference, status: enquiry.status } });
   });
+  } catch (e) {
+    return persistCatch(e, "Quote could not be loaded.");
+  }
 }

@@ -1,5 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { classifyPersistError } from "../src/lib/persist-error";
+import { afterEach, describe, expect, it } from "vitest";
+import { persistCatch } from "../src/lib/http";
+import { PersistError, classifyPersistError } from "../src/lib/persist-error";
+import { searchAvailability } from "../src/lib/store";
 
 describe("inventory persist error classification", () => {
   it("maps PGRST205 to a missing-table message without leaking internals", () => {
@@ -24,5 +26,36 @@ describe("inventory persist error classification", () => {
 
   it("maps connectivity failures", () => {
     expect(classifyPersistError("runtime_state.pull", { message: "fetch failed ECONNREFUSED" }).reason).toBe("connectivity");
+  });
+
+  it("maps PersistError to HTTP 503 with sanitized persistFailure", () => {
+    const res = persistCatch(
+      new PersistError(classifyPersistError("runtime_state.pull", { code: "PGRST205", message: "schema cache" })),
+    );
+    expect(res.status).toBe(503);
+  });
+});
+
+describe("hosted availability without persistence", () => {
+  const saved: Record<string, string | undefined> = {};
+  function setEnv(key: string, value: string | undefined) {
+    if (!(key in saved)) saved[key] = process.env[key];
+    if (value === undefined) delete process.env[key];
+    else process.env[key] = value;
+  }
+  afterEach(() => {
+    for (const [key, value] of Object.entries(saved)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+      delete saved[key];
+    }
+  });
+
+  it("never reports dates available on Vercel when DATABASE_MODE=memory", async () => {
+    setEnv("VERCEL", "1");
+    setEnv("DATABASE_MODE", "memory");
+    const result = await searchAvailability({ product: "stay", startDate: "2026-12-01", endDate: "2026-12-03" });
+    expect(result.available).toBe(false);
+    expect(result.reason).toMatch(/persistence|DATABASE_MODE/i);
   });
 });

@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { can, currentStaff } from "@/lib/staff";
-import { error, json, readJson } from "@/lib/http";
+import { error, json, persistCatch, readJson } from "@/lib/http";
 import { publicRooms, runLocked, runLockedRead, updateRoomMedia } from "@/lib/store";
 
 const schema = z.object({
@@ -14,10 +14,14 @@ const schema = z.object({
 export async function GET() {
   const staff = await currentStaff();
   if (!staff) return error("Unauthorized.", 401);
-  return json({
-    rooms: await runLockedRead(() => publicRooms()),
-    note: "The estate video does not contain five distinct bedroom interiors. Publish photographs only from owner-approved files under /images/.",
-  });
+  try {
+    return json({
+      rooms: await runLockedRead(() => publicRooms()),
+      note: "The estate video does not contain five distinct bedroom interiors. Publish photographs only from owner-approved files under /images/.",
+    });
+  } catch (e) {
+    return persistCatch(e, "Rooms could not be loaded.");
+  }
 }
 
 export async function POST(req: Request) {
@@ -28,7 +32,11 @@ export async function POST(req: Request) {
   }
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
-  const result = await runLocked(() => updateRoomMedia(parsed.data.slug, parsed.data, staff.email));
-  if (!result.ok) return error(result.error, 400);
-  return json(result);
+  try {
+    const result = await runLocked(() => updateRoomMedia(parsed.data.slug, parsed.data, staff.email));
+    if (!result.ok) return error(result.error, 400);
+    return json(result);
+  } catch (e) {
+    return persistCatch(e, "Room media could not be saved.");
+  }
 }

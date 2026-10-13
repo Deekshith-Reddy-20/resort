@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { can, currentStaff } from "@/lib/staff";
-import { error, json, readJson } from "@/lib/http";
+import { error, json, persistCatch, readJson } from "@/lib/http";
 import {
   commercialState,
   publishStayConfig,
@@ -40,7 +40,11 @@ const draftSchema = z.object({
 export async function GET() {
   const staff = await currentStaff();
   if (!staff) return error("Unauthorized.", 401);
-  return json(await runLockedRead(() => commercialState()));
+  try {
+    return json(await runLockedRead(() => commercialState()));
+  } catch (e) {
+    return persistCatch(e, "Settings could not be loaded.");
+  }
 }
 
 export async function POST(req: Request) {
@@ -50,16 +54,20 @@ export async function POST(req: Request) {
   const parsed = await readJson(req, draftSchema);
   if (!parsed.ok) return parsed.response;
   const { action, ...patch } = parsed.data;
-  return runLocked(() => {
-    if (action === "unpublish") {
-      return json(unpublishStayConfig(staff.email));
-    }
-    updateDraftSettings(patch, staff.email);
-    if (action === "publish") {
-      const result = publishStayConfig(staff.email);
-      if (!result.ok) return error(result.error, 422, "STAY_CONFIG_INCOMPLETE", { missingSettings: result.missingSettings });
-      return json(result);
-    }
-    return json(commercialState());
-  });
+  try {
+    return await runLocked(() => {
+      if (action === "unpublish") {
+        return json(unpublishStayConfig(staff.email));
+      }
+      updateDraftSettings(patch, staff.email);
+      if (action === "publish") {
+        const result = publishStayConfig(staff.email);
+        if (!result.ok) return error(result.error, 422, "STAY_CONFIG_INCOMPLETE", { missingSettings: result.missingSettings });
+        return json(result);
+      }
+      return json(commercialState());
+    });
+  } catch (e) {
+    return persistCatch(e, "Settings could not be saved.");
+  }
 }

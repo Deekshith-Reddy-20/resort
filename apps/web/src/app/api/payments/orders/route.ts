@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { error, json, readJson } from "@/lib/http";
+import { error, json, persistCatch, readJson } from "@/lib/http";
+import { PersistError } from "@/lib/persist-error";
 import { createRazorpayOrder, razorpayConfigured } from "@/lib/payments";
 import { attachOrder, preparePayment, runLocked } from "@/lib/store";
 
@@ -17,7 +18,12 @@ export async function POST(req: Request) {
   if (!razorpayConfigured()) {
     return error("Payments are not configured. Razorpay test credentials are required.", 503, "PAYMENTS_NOT_CONFIGURED");
   }
-  const prepared = await runLocked(() => preparePayment(parsed.data));
+  let prepared;
+  try {
+    prepared = await runLocked(() => preparePayment(parsed.data));
+  } catch (e) {
+    return persistCatch(e, "Payment order could not be prepared.");
+  }
   if (!prepared.ok) {
     return error(prepared.error, prepared.status, "code" in prepared ? prepared.code : undefined);
   }
@@ -58,7 +64,8 @@ export async function POST(req: Request) {
       receipt: prepared.reference,
       reused: false,
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof PersistError) return persistCatch(e);
     return error("Could not create a payment order.", 502, "RAZORPAY_ORDER_FAILED");
   }
 }

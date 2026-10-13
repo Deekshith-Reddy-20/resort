@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { can, currentStaff } from "@/lib/staff";
-import { error, isoDate, json, readJson } from "@/lib/http";
+import { error, isoDate, json, persistCatch, readJson } from "@/lib/http";
 import { addMaintenance } from "@/lib/store";
 
 const schema = z.object({
@@ -17,7 +17,11 @@ export async function POST(req: Request) {
   }
   const parsed = await readJson(req, schema);
   if (!parsed.ok) return parsed.response;
-  const result = await addMaintenance(parsed.data.startDate, parsed.data.endDate, parsed.data.reason, staff.email);
-  if (!result.ok) return error(result.error ?? "Conflict", 409);
-  return json(result, 201);
+  try {
+    const result = await addMaintenance(parsed.data.startDate, parsed.data.endDate, parsed.data.reason, staff.email);
+    if (!result.ok) return error(result.error ?? "Conflict", 409);
+    return json(result, 201);
+  } catch (e) {
+    return persistCatch(e, "Maintenance block could not be saved.");
+  }
 }

@@ -1,4 +1,4 @@
-import { error, json } from "@/lib/http";
+import { error, json, persistCatch } from "@/lib/http";
 import { verifyWebhookSignature } from "@/lib/payments";
 import { applyRazorpayWebhook } from "@/lib/store";
 
@@ -23,11 +23,15 @@ export async function POST(req: Request) {
   }
   const payment = payload.payload?.payment?.entity;
   const eventId = req.headers.get("x-razorpay-event-id") ?? `${payload.event}:${payment?.id ?? ""}`;
-  const result = await applyRazorpayWebhook({
-    eventId,
-    event: payload.event,
-    paymentId: payment?.id,
-    orderId: payment?.order_id,
-  });
-  return json(result);
+  try {
+    const result = await applyRazorpayWebhook({
+      eventId,
+      event: payload.event,
+      paymentId: payment?.id,
+      orderId: payment?.order_id,
+    });
+    return json(result);
+  } catch (e) {
+    return persistCatch(e, "Webhook could not be applied.");
+  }
 }

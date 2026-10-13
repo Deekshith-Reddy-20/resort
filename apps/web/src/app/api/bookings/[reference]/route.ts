@@ -1,4 +1,4 @@
-import { error, json } from "@/lib/http";
+import { error, json, persistCatch } from "@/lib/http";
 import { lookupStay, publicStayByReference, runLockedRead } from "@/lib/store";
 
 export async function GET(req: Request, ctx: { params: Promise<{ reference: string }> }) {
@@ -6,14 +6,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ reference: stri
   const url = new URL(req.url);
   const email = url.searchParams.get("email");
   const phone = url.searchParams.get("phone");
-  return runLockedRead(() => {
-    if (email && phone) {
-      const booking = lookupStay(reference, email, phone);
-      if (!booking) return error("Booking not found.", 404);
-      return json(booking);
-    }
-    const limited = publicStayByReference(reference);
-    if (!limited) return error("Booking not found.", 404);
-    return json(limited);
-  });
+  try {
+    return await runLockedRead(() => {
+      if (email && phone) {
+        const booking = lookupStay(reference, email, phone);
+        if (!booking) return error("Booking not found.", 404);
+        return json(booking);
+      }
+      const limited = publicStayByReference(reference);
+      if (!limited) return error("Booking not found.", 404);
+      return json(limited);
+    });
+  } catch (e) {
+    return persistCatch(e, "Booking could not be loaded.");
+  }
 }

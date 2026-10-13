@@ -30,8 +30,26 @@ Paste each file into the Supabase SQL editor **in this order**. Do not run `RESE
    Updates room image paths only. Does not drop rows. Safe to re-run.
 4. `supabase/migrations/20261013123000_runtime_state.sql`  
    `runtime_state(property_slug PK, payload jsonb, updated_at)`. RLS on, **no public policies**. `CREATE TABLE IF NOT EXISTS` — safe to re-run.
+5. `supabase/migrations/20261013140000_runtime_state_upsert.sql`  
+   Function `upsert_runtime_state(text, jsonb)` with a transaction advisory lock. Safe to re-run (`CREATE OR REPLACE`). Requires the table from step 4. The app falls back to a plain upsert if this function is missing.
 
-**Live production (verified in Vercel logs):** `GET /api/public/config` and `POST /api/pricing/quote` fail with PostgREST `PGRST205` (`runtime_state` not in the schema cache). That is a missing table, not bad capacity data. Applying this file in the linked Supabase SQL editor is the required repair. Do not reset the database.
+**Live production (observed 13 Oct 2026):** `GET https://resort-delta-nine.vercel.app/api/public/config` returned HTTP 503 with PostgREST `PGRST205` (`runtime_state` not in the schema cache). That is a missing table, not bad capacity data. Applying file 4 in the **Vercel-linked** Supabase SQL editor is the required repair. Do not reset the database. Do not create a hand-built table with different columns.
+
+### SQL Editor steps (owner)
+
+1. Open [Supabase Dashboard](https://supabase.com/dashboard) → the project whose keys appear on Vercel as `v_farm_resort_*`.
+2. SQL Editor → New query. Paste the full contents of `20261013123000_runtime_state.sql`. Run.
+3. New query. Paste `20261013140000_runtime_state_upsert.sql`. Run.
+4. New query. Paste `supabase/verify_required_tables.sql`. Confirm `runtime_state` is listed.
+5. Wait ~10 seconds for schema cache. Then `GET https://resort-delta-nine.vercel.app/api/public/config` should be HTTP 200 with `persistencyReady: true` and no `missing_table`.
+
+Optional CLI on a machine that can inject production secrets:
+
+```bash
+npx vercel env run -e production -- node scripts/apply-runtime-state.mjs
+```
+
+This workspace could not inject those secrets (`17 Secret values cannot be pulled`).
 
 Then run `supabase/verify_required_tables.sql` (read-only). You should see `admin_profiles`, `inventory_blocks`, `properties`, `runtime_state`, and related booking tables.
 

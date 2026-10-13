@@ -48,10 +48,15 @@ if (!postgresUrl) {
 
 const postgres = (await import("postgres")).default;
 const sql = postgres(postgresUrl, { ssl: "require", max: 1, connection: { application_name: "vfarms-migrate" } });
-const file = join("supabase", "migrations", "20261013123000_runtime_state.sql");
+const files = [
+  join("supabase", "migrations", "20261013123000_runtime_state.sql"),
+  join("supabase", "migrations", "20261013140000_runtime_state_upsert.sql"),
+];
 try {
-  await sql.unsafe(readFileSync(file, "utf8"));
-  console.log("applied", file);
+  for (const file of files) {
+    await sql.unsafe(readFileSync(file, "utf8"));
+    console.log("applied", file);
+  }
   const tables = await sql`select to_regclass('public.runtime_state') as exists`;
   console.log("runtime_state exists", Boolean(tables[0]?.exists));
 } catch (error) {

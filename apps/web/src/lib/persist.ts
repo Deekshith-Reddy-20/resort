@@ -71,8 +71,17 @@ export async function pushStore() {
     logFailure(classifyPersistError("runtime_state.push", { message: "service client missing", code: "missing_config" }));
     return false;
   }
+  const payload = io.serialize();
+  const rpc = await client.rpc("upsert_runtime_state", { p_slug: PROPERTY, p_payload: payload });
+  if (!rpc.error) return true;
+  const rpcMissing =
+    rpc.error.code === "PGRST202" || /could not find the function|schema cache/i.test(rpc.error.message ?? "");
+  if (!rpcMissing) {
+    logFailure(classifyPersistError("runtime_state.push", rpc.error));
+    return false;
+  }
   const { error } = await client.from("runtime_state").upsert(
-    { property_slug: PROPERTY, payload: io.serialize(), updated_at: new Date().toISOString() },
+    { property_slug: PROPERTY, payload, updated_at: new Date().toISOString() },
     { onConflict: "property_slug" },
   );
   if (error) {
