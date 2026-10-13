@@ -65,6 +65,13 @@ export function EventsForm() {
             <li>4. Accept and pay — a hold is taken only after acceptance; payment is verified on the server.</li>
           </ol>
           <p>Overnight room use, catering, décor, and vendors are not included unless an issued quote says so.</p>
+          <p>
+            Already have a quote reference? Open{" "}
+            <a className="text-dragon underline" href="/events/quotes/VF-QTE">
+              /events/quotes/your-reference
+            </a>{" "}
+            and replace the last segment with the issued quote id.
+          </p>
         </aside>
         {result ? (
           <div className="rounded-3xl bg-white p-8" role="status">

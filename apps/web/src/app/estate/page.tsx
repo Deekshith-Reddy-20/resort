@@ -1,7 +1,11 @@
 import Link from "next/link";
+import { EstateSchematic } from "@/components/EstateSchematic";
 import { PageHero } from "@/components/PageHero";
 import { BRAND, GALLERY } from "@/lib/content";
 import { pageMeta } from "@/lib/seo";
+import { publicProperty } from "@/lib/store";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = pageMeta(
   "The Estate",
@@ -34,7 +38,11 @@ export default function EstatePage() {
         </div>
       </section>
       <section className="mx-auto max-w-7xl px-4 pb-16 md:px-6">
-        <h2 className="font-serif text-3xl text-forest">What is confirmed</h2>
+        <h2 className="font-serif text-3xl text-forest">Estate schematic</h2>
+        <div className="mt-6">
+          <EstateSchematic zones={publicProperty().map.zones} note={publicProperty().map.note} />
+        </div>
+        <h2 className="mt-16 font-serif text-3xl text-forest">What is confirmed</h2>
         <p className="mt-2 max-w-2xl text-sm text-forest/70">
           Exact coordinates, boundaries, parking, and pathways are pending owner confirmation. Labels below are a working
           schematic, not a surveyed map.

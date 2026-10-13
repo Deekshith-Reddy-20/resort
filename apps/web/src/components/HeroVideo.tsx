@@ -10,9 +10,8 @@ export function HeroVideo() {
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const mobile = window.matchMedia("(max-width: 767px)").matches;
     const connection = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection;
-    if (reduced || mobile || connection?.saveData) {
+    if (reduced || connection?.saveData) {
       setMode("poster");
       return;
     }
@@ -20,7 +19,19 @@ export function HeroVideo() {
   }, []);
 
   useEffect(() => {
-    if (mode === "video") videoRef.current?.play().catch(() => setMode("poster"));
+    const video = videoRef.current;
+    if (mode !== "video" || !video) return;
+    video.loop = true;
+    video.muted = true;
+    video.playsInline = true;
+    const play = () => video.play().catch(() => setMode("poster"));
+    play();
+    const onEnded = () => {
+      video.currentTime = 0;
+      play();
+    };
+    video.addEventListener("ended", onEnded);
+    return () => video.removeEventListener("ended", onEnded);
   }, [mode]);
 
   return (
@@ -28,28 +39,28 @@ export function HeroVideo() {
       {mode === "video" ? (
         <video
           ref={videoRef}
-          className="absolute inset-0 h-full w-full object-cover object-[center_35%]"
+          className="absolute inset-0 h-full w-full object-cover object-center"
           autoPlay
           muted
           loop
           playsInline
-          preload="metadata"
+          preload="auto"
           poster="/images/estate/hero-poster.jpg"
           onError={() => setMode("poster")}
-          aria-label="Aerial film of the V-Farms estate"
+          aria-hidden
         >
-          <source src="/videos/vfarms-resort.mp4" type="video/mp4" />
+          <source src="/videos/preview.mp4" type="video/mp4" />
         </video>
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src="/images/estate/hero-poster.jpg"
-          alt="Aerial view of V-Farms at dusk"
-          className="absolute inset-0 h-full w-full object-cover object-[center_35%]"
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover object-center"
           fetchPriority="high"
         />
       )}
-      <div className="absolute inset-0 bg-evergreen/55" />
+      <div className="absolute inset-0 bg-evergreen/50" />
       <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-evergreen to-transparent" />
       <div className="relative mx-auto flex min-h-[88vh] max-w-7xl flex-col justify-center px-4 pb-40 pt-28 md:px-6">
         <p className="text-[11px] uppercase tracking-[0.42em] text-ivory/75">The private estate</p>
@@ -62,26 +73,14 @@ export function HeroVideo() {
         <p className="mt-5 text-sm text-ivory/70">Near Hyderabad, Telangana · Five acres · Five rooms · Exclusive whole-property stays</p>
         <div className="mt-8 flex flex-wrap items-center gap-3">
           <Link href="/stays" className="btn-accent">
-            Plan Your Stay
+            Book Entire Resort
           </Link>
-          <Link href="/estate" className="btn-ghost">
+          <Link href="/events" className="btn-ghost">
+            Plan an Event
+          </Link>
+          <Link href="/estate" className="text-sm text-ivory/80 underline-offset-4 hover:underline">
             Explore the Estate
           </Link>
-          <Link href="/events" className="text-sm text-ivory/80 underline-offset-4 hover:underline">
-            Host an Event
-          </Link>
-          {mode === "poster" ? (
-            <button type="button" className="ml-auto inline-flex items-center gap-2 text-sm text-ivory/80" onClick={() => setMode("video")}>
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-ivory/50" aria-hidden>
-                ▶
-              </span>
-              Watch our film
-            </button>
-          ) : (
-            <button type="button" className="ml-auto text-sm text-ivory/70 underline-offset-4 hover:underline" onClick={() => setMode("poster")}>
-              Pause film
-            </button>
-          )}
         </div>
       </div>
       <div id="availability" className="relative z-10 mx-auto -mt-24 max-w-5xl px-4 pb-10 md:px-6">

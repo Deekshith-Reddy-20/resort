@@ -1,10 +1,24 @@
 import { json } from "@/lib/http";
+import { currentStaff } from "@/lib/staff";
+import { listNotifications } from "@/lib/store";
 
 export async function GET() {
+  const staff = await currentStaff();
+  const emailConfigured = Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  if (!staff) {
+    return json({
+      notifications: [],
+      emailConfigured,
+      pushConfigured: false,
+      notice: "Push notifications are not enabled. Transactional email sends only when a provider is configured.",
+    });
+  }
   return json({
-    notifications: [],
-    emailConfigured: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
+    notifications: listNotifications(),
+    emailConfigured,
     pushConfigured: false,
-    notice: "Push notifications are not enabled. Transactional email sends only when a provider is configured.",
+    notice: emailConfigured
+      ? "Email provider keys are present. Delivery is recorded only after the provider accepts the message."
+      : "RESEND_API_KEY and EMAIL_FROM are missing. Messages are stored as unconfigured, not delivered.",
   });
 }

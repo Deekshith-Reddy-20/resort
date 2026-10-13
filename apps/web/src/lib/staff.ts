@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 const COOKIE = "vfarms_staff";
 
 function secret() {
-  return process.env.STAFF_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+  return process.env.STAFF_SESSION_SECRET || "";
 }
 
 export function staffConfigured() {
@@ -46,12 +46,15 @@ export async function currentStaff() {
 
 export function can(role: string, action: "refund" | "pricing" | "content" | "reservations" | "ops" | "audit") {
   if (role === "owner" || role === "admin") return true;
-  if (action === "refund" || action === "pricing") return false;
+  if (action === "refund" || action === "pricing" || action === "audit") return false;
   if (action === "content") return role === "content";
   if (action === "reservations") return role === "reservations";
   if (action === "ops") return role === "operations" || role === "reservations";
-  if (action === "audit") return false;
   return false;
+}
+
+export function authorize(role: string, action: Parameters<typeof can>[1]) {
+  return can(role, action);
 }
 
 export const STAFF_COOKIE = COOKIE;

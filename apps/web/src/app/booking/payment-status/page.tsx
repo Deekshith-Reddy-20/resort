@@ -7,6 +7,7 @@ import { PageHero } from "@/components/PageHero";
 
 type Status = {
   reference: string;
+  kind?: string;
   paymentStatus: string;
   reservationStatus: string;
   exception: string | null;
@@ -58,7 +59,10 @@ function StatusBody() {
                 Reservation status: {status.reservationStatus}. Payment status: {status.paymentStatus}. A Checkout success
                 screen is not confirmation.
               </p>
-              <Link href={`/booking/${status.reference}`} className="btn-primary">
+              <Link
+                href={status.kind === "event" || status.reference.startsWith("VF-QTE") ? `/events/quotes/${status.reference}` : `/booking/${status.reference}`}
+                className="btn-primary"
+              >
                 Return to hold
               </Link>
             </>

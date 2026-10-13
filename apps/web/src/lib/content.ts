@@ -4,7 +4,7 @@ export const BRAND = {
   location: "Near Hyderabad, Telangana",
   property: "A private five-acre dragon fruit farm near Hyderabad for exclusive stays and memorable gatherings.",
   roomNotice:
-    "Five distinct rooms. One exclusive estate booking. All five rooms are included in your eligible stay.",
+    "Five distinct rooms, one exclusive booking. All five rooms are included in your whole-resort stay.",
   mediaNote:
     "Photography is taken from the V-Farms resort video. Stills were upscaled and colour-graded for presentation. They are not native 4K footage or genuine HDR.",
 } as const;

@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { Cormorant_Garamond, Outfit } from "next/font/google";
-import { MobileDock } from "@/components/MobileDock";
-import { SiteFooter } from "@/components/SiteFooter";
-import { SiteHeader } from "@/components/SiteHeader";
+import { PublicChrome } from "@/components/PublicChrome";
 import "./globals.css";
 
 const serif = Cormorant_Garamond({
@@ -71,12 +69,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a className="skip-link" href="#main">
           Skip to content
         </a>
-        <SiteHeader />
-        <div id="main" className="pb-24 text-charcoal md:pb-0">
-          {children}
-        </div>
-        <SiteFooter />
-        <MobileDock />
+        <PublicChrome>{children}</PublicChrome>
       </body>
     </html>
   );

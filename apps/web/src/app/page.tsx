@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { EstateFilm } from "@/components/EstateFilm";
 import { FaqAccordion } from "@/components/FaqAccordion";
 import { GalleryLightbox } from "@/components/GalleryLightbox";
 import { HeroVideo } from "@/components/HeroVideo";
@@ -131,7 +132,7 @@ export default function HomePage() {
             </ul>
             <div className="mt-6 flex flex-wrap gap-4 text-sm">
               <Link href="/stays" className="btn-accent">
-                Plan Your Stay
+                Book Entire Resort
               </Link>
               <Link href="/cancellation-policy" className="text-muted">
                 Cancellation policy
@@ -164,11 +165,13 @@ export default function HomePage() {
         </Container>
       </section>
 
+      <EstateFilm />
+
       <section className="py-20">
         <Container>
           <div className="mb-8 flex flex-wrap items-end justify-between gap-4">
             <div>
-              <h2 className="font-serif text-4xl text-forest">The farm, as filmed</h2>
+              <h2 className="font-serif text-4xl text-forest">Still frames from the estate</h2>
               <p className="mt-2 max-w-2xl text-sm text-muted">{BRAND.mediaNote}</p>
             </div>
             <Link href="/gallery" className="text-sm text-dragon">

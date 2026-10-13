@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { error, json, readJson } from "@/lib/http";
-import { signStaff, STAFF_COOKIE, staffConfigured } from "@/lib/staff";
+import { currentStaff, signStaff, STAFF_COOKIE, staffConfigured } from "@/lib/staff";
 
 const schema = z.object({
   email: z.string().email(),
@@ -25,6 +25,12 @@ export async function POST(req: Request) {
   const res = json({ ok: true, role: "owner" });
   res.cookies.set(STAFF_COOKIE, token, { httpOnly: true, sameSite: "lax", path: "/", secure: process.env.NODE_ENV === "production" });
   return res;
+}
+
+export async function GET() {
+  const staff = await currentStaff();
+  if (!staff) return error("Unauthorized.", 401);
+  return json({ email: staff.email, role: staff.role, name: staff.name });
 }
 
 export async function DELETE() {

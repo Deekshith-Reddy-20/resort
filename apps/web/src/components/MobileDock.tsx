@@ -10,10 +10,10 @@ export function MobileDock() {
     <div className="fixed inset-x-0 bottom-0 z-40 border-t border-stone bg-ivory/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur md:hidden">
       <div className="mx-auto grid max-w-lg grid-cols-2 gap-2">
         <Link href="/events" className="btn border border-forest/20 text-forest">
-          Host an event
+          Plan an Event
         </Link>
         <Link href="/stays" className="btn-primary">
-          Plan your stay
+          Book Entire Resort
         </Link>
       </div>
     </div>

@@ -19,6 +19,9 @@ export type CommercialSettings = {
   termsConfirmed: boolean;
   privacyConfirmed: boolean;
   holdMinutes: number;
+  minAdvanceDays: number | null;
+  maxAdvanceDays: number | null;
+  closedToArrival: string[];
 };
 
 export function emptyCommercial(): CommercialSettings {
@@ -37,6 +40,9 @@ export function emptyCommercial(): CommercialSettings {
     termsConfirmed: false,
     privacyConfirmed: false,
     holdMinutes: Number(process.env.HOLD_MINUTES ?? 15),
+    minAdvanceDays: null,
+    maxAdvanceDays: null,
+    closedToArrival: [],
   };
 }
 

@@ -35,6 +35,9 @@ describe("stay commercial publish guard", () => {
         termsConfirmed: true,
         privacyConfirmed: true,
         holdMinutes: 15,
+        minAdvanceDays: null,
+        maxAdvanceDays: null,
+        closedToArrival: [],
       }),
     ).toEqual([]);
   });

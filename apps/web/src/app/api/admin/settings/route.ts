@@ -30,6 +30,9 @@ const draftSchema = z.object({
   termsConfirmed: z.boolean().optional(),
   privacyConfirmed: z.boolean().optional(),
   holdMinutes: z.number().int().min(5).max(120).optional(),
+  minAdvanceDays: z.number().int().min(0).max(365).nullable().optional(),
+  maxAdvanceDays: z.number().int().min(1).max(730).nullable().optional(),
+  closedToArrival: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
 });
 
 export async function GET() {

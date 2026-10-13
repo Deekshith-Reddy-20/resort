@@ -6,7 +6,7 @@ describe("G01 rooms are informational", () => {
     const rooms = publicRooms();
     expect(rooms).toHaveLength(5);
     expect(rooms.every((room) => room.bookable === false)).toBe(true);
-    expect(rooms.every((room) => room.notice.includes("exclusive estate booking"))).toBe(true);
+    expect(rooms.every((room) => room.notice.includes("exclusive booking"))).toBe(true);
   });
 
   it("publishes five distinct owner-supplied bedroom photographs", () => {

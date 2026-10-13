@@ -104,6 +104,55 @@ export interface ContactMessage {
   createdAt: string;
 }
 
+export interface NotificationRecord {
+  id: string;
+  type: "stay_hold" | "stay_confirmed" | "event_enquiry" | "event_quote" | "payment" | "exception" | "contact";
+  to: string;
+  subject: string;
+  body: string;
+  status: "queued" | "sent" | "failed" | "unconfigured";
+  error?: string;
+  retries: number;
+  createdAt: string;
+}
+
+export interface CmsContent {
+  heroTagline: string;
+  heroBody: string;
+  about: string;
+  farmStory: string;
+  contactPhone: string;
+  contactEmail: string;
+  whatsapp: string;
+  address: string;
+  mapsUrl: string;
+  supportHours: string;
+  published: boolean;
+}
+
+export interface MapZone {
+  id: string;
+  label: string;
+  detail: string;
+  published: boolean;
+}
+
+export function emptyCms(): CmsContent {
+  return {
+    heroTagline: "",
+    heroBody: "",
+    about: "",
+    farmStory: "",
+    contactPhone: "",
+    contactEmail: "",
+    whatsapp: "",
+    address: "",
+    mapsUrl: "",
+    supportHours: "",
+    published: false,
+  };
+}
+
 interface Db {
   customers: Customer[];
   stays: StayBooking[];
@@ -136,6 +185,15 @@ interface Db {
     live: boolean;
     publishedAt: string | null;
   };
+  cms: CmsContent;
+  notifications: NotificationRecord[];
+  operationsNotes: { id: string; date: string; kind: string; note: string; actor?: string }[];
+  refunds: { id: string; paymentId: string; amountMinor: number; reason: string; actor: string; createdAt: string; status: "recorded" }[];
+  mapZones: MapZone[];
+  eventTemplates: { id: string; name: string; notes: string; depositBps: number | null }[];
+  offlinePayments: { id: string; reference: string; amountMinor: number; method: string; note: string; actor: string; createdAt: string }[];
+  faqDrafts: { q: string; a: string; published: boolean }[];
+  notificationTemplates: { id: string; name: string; subject: string; body: string }[];
 }
 
 const globalStore = globalThis as unknown as { __vfarmsDb?: Db };
@@ -161,13 +219,66 @@ function emptyDb(): Db {
       live: false,
       publishedAt: null,
     },
+    cms: emptyCms(),
+    notifications: [],
+    operationsNotes: [],
+    refunds: [],
+    mapZones: [
+      { id: "arrival", label: "Arrival", detail: "Actual check-in point and parking guidance pending owner confirmation.", published: false },
+      { id: "building", label: "Guest building", detail: "One building with five distinct rooms, included together in a stay.", published: true },
+      { id: "plantation", label: "Dragon fruit plantation", detail: "Cultivation areas visible in the resort video. Restricted-area rules unpublished.", published: true },
+    ],
+    eventTemplates: [],
+    offlinePayments: [],
+    faqDrafts: [],
+    notificationTemplates: [
+      { id: "hold", name: "Reservation hold", subject: "Your V-Farms hold", body: "A whole-property hold was created. It is not a confirmed stay until payment is verified." },
+      { id: "confirmed", name: "Stay confirmed", subject: "V-Farms stay confirmed", body: "Your exclusive estate stay is confirmed after verified payment." },
+      { id: "enquiry", name: "Event enquiry", subject: "Event enquiry received", body: "Your enquiry is not a booking and does not hold the calendar." },
+    ],
   };
+}
+
+function hydrateDb(d: Db): Db {
+  const fresh = emptyDb();
+  d.notifications ??= fresh.notifications;
+  d.cms ??= fresh.cms;
+  d.operationsNotes ??= fresh.operationsNotes;
+  d.refunds ??= fresh.refunds;
+  d.mapZones ??= fresh.mapZones;
+  d.eventTemplates ??= fresh.eventTemplates;
+  d.offlinePayments ??= fresh.offlinePayments;
+  d.faqDrafts ??= fresh.faqDrafts;
+  d.notificationTemplates ??= fresh.notificationTemplates;
+  d.customers ??= [];
+  d.stays ??= [];
+  d.holds ??= [];
+  d.events ??= [];
+  d.quotes ??= [];
+  d.payments ??= [];
+  d.exceptions ??= [];
+  d.maintenance ??= [];
+  d.audit ??= [];
+  d.contacts ??= [];
+  if (d.settings?.draft) {
+    d.settings.draft.minAdvanceDays ??= null;
+    d.settings.draft.maxAdvanceDays ??= null;
+    d.settings.draft.closedToArrival ??= [];
+  }
+  if (d.settings?.published) {
+    d.settings.published.minAdvanceDays ??= null;
+    d.settings.published.maxAdvanceDays ??= null;
+    d.settings.published.closedToArrival ??= [];
+  }
+  return d;
 }
 
 export function db(): Db {
   if (!globalStore.__vfarmsDb) {
     globalStore.__vfarmsDb = emptyDb();
     bootstrapCommercialFromEnv(globalStore.__vfarmsDb);
+  } else {
+    hydrateDb(globalStore.__vfarmsDb);
   }
   return globalStore.__vfarmsDb;
 }
@@ -205,6 +316,15 @@ function purgeExpiredInventory() {
       if (stay && (stay.status === "held" || stay.status === "awaiting_payment")) {
         stay.status = "expired";
         stay.updatedAt = nowIso();
+      }
+    }
+    if (hold.quoteId) {
+      const quote = db().quotes.find((q) => q.id === hold.quoteId);
+      if (quote && quote.status === "accepted") {
+        quote.status = "issued";
+        quote.holdId = undefined;
+        const enquiry = db().events.find((e) => e.id === quote.enquiryId);
+        if (enquiry && enquiry.status === "held") enquiry.status = "quote_sent";
       }
     }
   }
@@ -310,18 +430,33 @@ export function publicConfig() {
 }
 
 export function publicProperty() {
+  const cms = db().cms;
+  const publishedZones = db().mapZones.filter((z) => z.published);
   return {
     id: PROPERTY_ID,
     name: BRAND.name,
-    tagline: BRAND.tagline,
+    tagline: cms.published && cms.heroTagline ? cms.heroTagline : BRAND.tagline,
     location: BRAND.location,
-    description: BRAND.property,
+    description: cms.published && cms.about ? cms.about : BRAND.property,
+    farmStory: cms.published ? cms.farmStory || null : null,
     acreage: "Five acres",
     rooms: 5,
+    contact: cms.published
+      ? {
+          phone: cms.contactPhone || null,
+          email: cms.contactEmail || null,
+          whatsapp: cms.whatsapp || null,
+          address: cms.address || null,
+          mapsUrl: cms.mapsUrl || null,
+          supportHours: cms.supportHours || null,
+        }
+      : { phone: null, email: null, whatsapp: null, address: null, mapsUrl: null, supportHours: null },
     map: {
       type: "schematic",
       note: "Exact boundaries, coordinates, and pathways are not verified. This is a labelled schematic, not a surveyed map.",
-      zones: [
+      zones: publishedZones.length
+        ? publishedZones
+        : [
         { id: "arrival", label: "Arrival", detail: "Actual check-in point pending owner confirmation." },
         { id: "building", label: "Guest building", detail: "One building with five distinct rooms." },
         { id: "plantation", label: "Dragon fruit plantation", detail: "Cultivation areas visible in the resort video." },
@@ -383,7 +518,8 @@ export function publicGallery() {
 }
 
 export function publicFaqs() {
-  return FAQS;
+  const extras = db().faqDrafts.filter((f) => f.published).map((f) => ({ q: f.q, a: f.a }));
+  return [...FAQS, ...extras];
 }
 
 export function publicPolicies() {
@@ -395,6 +531,28 @@ export function publicPolicies() {
       body: live?.cancellationSummary ?? POLICIES.cancellation.body,
     },
   };
+}
+
+function daysBetweenKolkata(from: string, to: string) {
+  const a = Date.parse(`${from}T00:00:00+05:30`);
+  const b = Date.parse(`${to}T00:00:00+05:30`);
+  return Math.round((b - a) / 86_400_000);
+}
+
+function stayWindowIssue(checkIn: string, live: CommercialSettings | null) {
+  if (!live) return null;
+  if (live.closedToArrival?.includes(checkIn)) {
+    return "This check-in date is closed to arrival.";
+  }
+  const today = todayKolkata();
+  const advance = daysBetweenKolkata(today, checkIn);
+  if (live.minAdvanceDays != null && advance < live.minAdvanceDays) {
+    return `Stays must be booked at least ${live.minAdvanceDays} day(s) in advance.`;
+  }
+  if (live.maxAdvanceDays != null && advance > live.maxAdvanceDays) {
+    return `Stays cannot be booked more than ${live.maxAdvanceDays} day(s) ahead.`;
+  }
+  return null;
 }
 
 export async function searchAvailability(input: {
@@ -437,12 +595,16 @@ export async function createStayQuote(input: { checkIn: string; checkOut: string
     bookingEnabled: Boolean(live),
   });
   const missingSettings = bookingBlockers();
-  const available = availability.available && quote.available !== false;
-  let blockCode: "none" | "unpublished" | "unavailable" | "capacity" | "stay_rules" = "none";
+  const windowIssue = stayWindowIssue(input.checkIn, live);
+  const available = availability.available && quote.available !== false && !windowIssue;
+  let blockCode: "none" | "unpublished" | "unavailable" | "capacity" | "stay_rules" | "booking_window" = "none";
   let blockMessage: string | null = null;
   if (missingSettings.length) {
     blockCode = "unpublished";
     blockMessage = missingSettings[0] ?? "Whole-property stay settings are not published.";
+  } else if (windowIssue) {
+    blockCode = "booking_window";
+    blockMessage = windowIssue;
   } else if (!availability.available) {
     blockCode = "unavailable";
     blockMessage = availability.reason ?? "The property is unavailable for the selected dates.";
@@ -503,6 +665,8 @@ export async function createStayHold(input: {
     if (!quote.available || quote.totalMinor == null) {
       return { ok: false as const, error: quote.reason ?? "Those dates cannot be reserved." };
     }
+    const windowIssue = stayWindowIssue(input.checkIn, live);
+    if (windowIssue) return { ok: false as const, error: windowIssue };
     const customer: Customer = {
       id: crypto.randomUUID(),
       fullName: input.fullName,
@@ -643,6 +807,13 @@ export async function createEventEnquiry(input: {
   };
   db().events.push(enquiry);
   audit("enquiry.create", "event", enquiry.reference);
+  queueNotification({
+    type: "event_enquiry",
+    to: process.env.NOTIFY_OWNER_EMAIL || input.email,
+    subject: `Event enquiry ${enquiry.reference}`,
+    body: `Enquiry ${enquiry.reference} received for ${enquiry.eventType} ${enquiry.startDate}–${enquiry.endDate}. This is not a booking.`,
+    status: "queued",
+  });
   return {
     reference: enquiry.reference,
     status: enquiry.status,
@@ -656,6 +827,37 @@ export function lookupEnquiry(reference: string, email: string, phone: string) {
   if (enquiry.verificationHash !== verificationHash(email, phone)) return null;
   const quote = db().quotes.find((q) => q.enquiryId === enquiry.id);
   return { enquiry, quote };
+}
+
+export function lookupQuote(reference: string, email: string, phone: string) {
+  const quote = db().quotes.find((q) => q.reference === reference);
+  if (!quote) return null;
+  const enquiry = db().events.find((e) => e.id === quote.enquiryId);
+  if (!enquiry || enquiry.verificationHash !== verificationHash(email, phone)) return null;
+  const customer = db().customers.find((c) => c.id === enquiry.customerId);
+  const hold = db().holds.find((h) => h.quoteId === quote.id);
+  return {
+    quote: {
+      reference: quote.reference,
+      status: quote.status,
+      totalMinor: quote.totalMinor,
+      dueNowMinor: quote.dueNowMinor,
+      lineItems: quote.lineItems,
+      expiresAt: quote.expiresAt,
+      priceSnapshot: quote.priceSnapshot,
+    },
+    enquiry: {
+      reference: enquiry.reference,
+      status: enquiry.status,
+      eventType: enquiry.eventType,
+      startDate: enquiry.startDate,
+      endDate: enquiry.endDate,
+      expectedAttendees: enquiry.expectedAttendees,
+    },
+    guestName: customer?.fullName ?? "",
+    holdExpiresAt: hold?.expiresAt ?? null,
+    paymentsConfigured: Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
+  };
 }
 
 export async function issueQuote(input: {
@@ -681,8 +883,17 @@ export async function issueQuote(input: {
   };
   db().quotes.push(quote);
   enquiry.status = "quote_sent";
+  const alloc = canAllocate(
+    { kind: "event", startDate: enquiry.startDate, endDate: enquiry.endDate },
+    snapshot(),
+    PROPERTY_ID,
+  );
   audit("quote.issue", "event_quote", quote.reference, input.actor);
-  return { ok: true as const, quote };
+  return {
+    ok: true as const,
+    quote,
+    availabilityWarning: alloc.ok ? null : alloc.message ?? "Dates are currently occupied. The quote does not hold inventory.",
+  };
 }
 
 export async function acceptQuote(quoteReference: string, email: string, phone: string) {
@@ -930,32 +1141,197 @@ export function addContact(input: ContactMessage) {
   audit("contact.create", "contact", input.id);
 }
 
+function todayKolkata() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).format(
+    new Date(),
+  );
+}
+
+function padDate(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function stayOccupiesNight(date: string, checkIn: string, checkOut: string) {
+  return date >= checkIn && date < checkOut;
+}
+
+function inclusiveOccupies(date: string, start: string, end: string) {
+  return date >= start && date <= end;
+}
+
+export type CalendarTone = "available" | "unavailable" | "hold" | "past" | "unconfigured";
+
+export function propertyMonth(year: number, monthIndex: number) {
+  const d = db();
+  const today = todayKolkata();
+  const now = Date.now();
+  const bookingEnabled = Boolean(d.settings.live && d.settings.published);
+  const last = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+  const days = [];
+  for (let day = 1; day <= last; day += 1) {
+    const iso = `${year}-${padDate(monthIndex + 1)}-${padDate(day)}`;
+    const stayHit = d.stays.find(
+      (s) => ["confirmed", "held", "awaiting_payment"].includes(s.status) && stayOccupiesNight(iso, s.checkIn, s.checkOut),
+    );
+    const eventHit = d.events.find(
+      (e) => ["confirmed", "held"].includes(e.status) && inclusiveOccupies(iso, e.startDate, e.endDate),
+    );
+    const closeHit = d.maintenance.find((m) => inclusiveOccupies(iso, m.startDate, m.endDate));
+    const holdHit = d.holds.find((h) => Date.parse(h.expiresAt) > now && (h.kind === "stay" ? stayOccupiesNight(iso, h.startDate, h.endDate) : inclusiveOccupies(iso, h.startDate, h.endDate)));
+    const pending = d.events.find(
+      (e) => ["enquiry", "review", "quote_sent", "accepted"].includes(e.status) && inclusiveOccupies(iso, e.startDate, e.endDate),
+    );
+    let tone: CalendarTone = "available";
+    let label = "Available";
+    let blocker: string | null = null;
+    if (iso < today) {
+      tone = "past";
+      label = "Past";
+    } else if (stayHit || eventHit || closeHit) {
+      tone = "unavailable";
+      label = "Unavailable";
+      blocker = stayHit?.reference ?? eventHit?.reference ?? closeHit?.reason ?? "Blocked";
+    } else if (holdHit) {
+      tone = "hold";
+      label = "Temporary hold";
+      blocker = holdHit.reference;
+    } else if (!bookingEnabled) {
+      tone = "unconfigured";
+      label = "No occupancy · booking unpublished";
+    }
+    days.push({
+      date: iso,
+      tone,
+      label,
+      blocker,
+      pendingEnquiry: Boolean(pending && tone !== "unavailable"),
+      pendingReference: pending?.reference ?? null,
+    });
+  }
+  return { year, monthIndex, today, bookingEnabled, days };
+}
+
+export function staffCancelStay(reference: string, actor?: string) {
+  const stay = db().stays.find((s) => s.reference === reference);
+  if (!stay) return { ok: false as const, error: "Stay not found." };
+  if (stay.status === "confirmed") {
+    return { ok: false as const, error: "Confirmed stays require an owner refund/cancellation review. Do not silently release paid inventory." };
+  }
+  stay.status = "cancelled";
+  stay.updatedAt = nowIso();
+  db().holds = db().holds.filter((h) => h.stayId !== stay.id);
+  audit("stay.cancel", "stay", stay.reference, actor);
+  return { ok: true as const, reference, status: stay.status };
+}
+
 export function adminOverview() {
   const d = db();
+  const today = todayKolkata();
+  const now = Date.now();
   return {
+    today,
+    timezone: "Asia/Kolkata",
+    arrivalsToday: d.stays.filter((s) => s.status === "confirmed" && s.checkIn === today).length,
+    departuresToday: d.stays.filter((s) => s.status === "confirmed" && s.checkOut === today).length,
+    activeStays: d.stays.filter((s) => s.status === "confirmed" && s.checkIn <= today && s.checkOut > today).length,
+    upcomingEvents: d.events.filter((e) => (e.status === "confirmed" || e.status === "held") && e.startDate >= today).length,
+    pendingEnquiries: d.events.filter((e) => e.status === "enquiry" || e.status === "review").length,
+    quotesAwaiting: d.quotes.filter((q) => q.status === "issued").length,
+    activeHolds: d.holds.filter((h) => Date.parse(h.expiresAt) > now).length,
+    pendingPayments: d.stays.filter((s) => s.status === "awaiting_payment" || s.status === "held").length,
+    exceptions: d.exceptions.length,
+    closures: d.maintenance.length,
+    outstandingMinor: d.stays.reduce((sum, s) => {
+      const snap = s.priceSnapshot as { totalMinor?: number };
+      const pay = d.payments.find((p) => p.stayReference === s.reference);
+      const paid = pay?.status === "captured" ? pay.amountMinor : 0;
+      return sum + Math.max(0, (snap.totalMinor ?? 0) - paid);
+    }, 0),
     stays: d.stays.length,
     confirmedStays: d.stays.filter((s) => s.status === "confirmed").length,
     enquiries: d.events.length,
     quotes: d.quotes.length,
-    exceptions: d.exceptions.length,
     contacts: d.contacts.length,
     bookingEnabled: Boolean(d.settings.live && d.settings.published),
     calendar: [
       ...d.stays.map((s) => ({ type: "stay", reference: s.reference, status: s.status, start: s.checkIn, end: s.checkOut })),
       ...d.events
-        .filter((e) => e.status === "confirmed" || e.status === "held")
-        .map((e) => ({ type: "event", reference: e.reference, status: e.status, start: e.startDate, end: e.endDate })),
+        .filter((e) => ["confirmed", "held", "quote_sent", "accepted"].includes(e.status))
+        .map((e) => ({
+          type: e.status === "confirmed" || e.status === "held" ? "event" : "event_soft",
+          reference: e.reference,
+          status: e.status,
+          start: e.startDate,
+          end: e.endDate,
+        })),
       ...d.maintenance.map((m) => ({ type: "maintenance", reference: m.id, status: "closed", start: m.startDate, end: m.endDate })),
-      ...d.holds.map((h) => ({ type: "hold", reference: h.reference, status: "hold", start: h.startDate, end: h.endDate })),
+      ...d.holds.filter((h) => Date.parse(h.expiresAt) > now).map((h) => ({ type: "hold", reference: h.reference, status: "hold", start: h.startDate, end: h.endDate })),
     ],
     exceptionsList: d.exceptions,
     audit: d.audit.slice(-100).reverse(),
     settings: d.settings,
-    staysList: d.stays,
-    eventsList: d.events,
+    staysList: d.stays.map((s) => {
+      const customer = d.customers.find((c) => c.id === s.customerId);
+      const pay = d.payments.find((p) => p.stayReference === s.reference);
+      const snap = s.priceSnapshot as { totalMinor?: number; dueNowMinor?: number };
+      const totalMinor = snap.totalMinor ?? 0;
+      const paidMinor = pay?.status === "captured" ? pay.amountMinor : 0;
+      return {
+        reference: s.reference,
+        status: s.status,
+        checkIn: s.checkIn,
+        checkOut: s.checkOut,
+        guests: s.guests,
+        createdAt: s.createdAt,
+        guestName: customer?.fullName ?? "Guest",
+        email: customer?.email ?? "",
+        phone: customer?.phone ?? "",
+        totalMinor,
+        paidMinor,
+        outstandingMinor: Math.max(0, totalMinor - paidMinor),
+        paymentStatus: pay?.status ?? "none",
+        type: "whole-property stay",
+        policySnapshot: s.policySnapshot,
+        priceSnapshot: s.priceSnapshot,
+        specialRequests: s.specialRequests ?? "",
+      };
+    }),
+    eventsList: d.events.map((e) => {
+      const customer = d.customers.find((c) => c.id === e.customerId);
+      const quote = d.quotes.find((q) => q.enquiryId === e.id);
+      return {
+        ...e,
+        guestName: customer?.fullName ?? "",
+        email: customer?.email ?? "",
+        phone: customer?.phone ?? "",
+        quoteReference: quote?.reference ?? null,
+        quoteStatus: quote?.status ?? null,
+        quoteTotalMinor: quote?.totalMinor ?? null,
+        dueNowMinor: quote?.dueNowMinor ?? null,
+      };
+    }),
     quotesList: d.quotes,
     payments: d.payments,
+    refunds: d.refunds,
+    offlinePayments: d.offlinePayments,
+    eventTemplates: d.eventTemplates,
+    faqDrafts: d.faqDrafts,
+    notificationTemplates: d.notificationTemplates,
+    reports: {
+      stayNights: d.stays
+        .filter((s) => s.status === "confirmed")
+        .reduce((n, s) => n + Math.max(0, (Date.parse(`${s.checkOut}T00:00:00+05:30`) - Date.parse(`${s.checkIn}T00:00:00+05:30`)) / 86400000), 0),
+      confirmedStays: d.stays.filter((s) => s.status === "confirmed").length,
+      confirmedEvents: d.events.filter((e) => e.status === "confirmed").length,
+      capturedRevenueMinor: d.payments.filter((p) => p.status === "captured").reduce((s, p) => s + p.amountMinor, 0),
+    },
     rooms: publicRooms(),
+    cms: d.cms,
+    notifications: d.notifications.slice(-50).reverse(),
+    operationsNotes: d.operationsNotes,
+    mapZones: d.mapZones,
+    contactsList: d.contacts,
+    integrations: integrationStatus(),
   };
 }
 
@@ -1038,4 +1414,127 @@ export function addMaintenance(startDate: string, endDate: string, reason: strin
     audit("maintenance.create", "maintenance", block.id, actor);
     return { ok: true as const, block };
   });
+}
+
+export function integrationStatus() {
+  return {
+    databaseMode: process.env.DATABASE_MODE ?? "memory",
+    supabaseUrl: Boolean(process.env.NEXT_PUBLIC_SUPABASE_URL),
+    staffSecret: Boolean(process.env.STAFF_SESSION_SECRET),
+    razorpayKeyId: Boolean(process.env.RAZORPAY_KEY_ID),
+    razorpaySecret: Boolean(process.env.RAZORPAY_KEY_SECRET),
+    razorpayWebhook: Boolean(process.env.RAZORPAY_WEBHOOK_SECRET),
+    razorpayLive: process.env.RAZORPAY_LIVE_MODE === "true",
+    email: Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM),
+    persistency: (process.env.DATABASE_MODE ?? "memory") === "supabase" ? "supabase" : "in-process memory (not production persistence)",
+  };
+}
+
+export function queueNotification(input: Omit<NotificationRecord, "id" | "createdAt" | "retries"> & { retries?: number }) {
+  const record: NotificationRecord = {
+    id: crypto.randomUUID(),
+    retries: input.retries ?? 0,
+    createdAt: nowIso(),
+    ...input,
+  };
+  db().notifications.push(record);
+  return record;
+}
+
+export function listNotifications() {
+  return db().notifications.slice().reverse();
+}
+
+export function updateCms(patch: Partial<CmsContent>, actor?: string) {
+  db().cms = { ...db().cms, ...patch };
+  audit("cms.update", "cms", db().cms.published ? "published" : "draft", actor);
+  return db().cms;
+}
+
+export function reviewEnquiry(reference: string, action: "review" | "decline", actor?: string) {
+  const enquiry = db().events.find((e) => e.reference === reference);
+  if (!enquiry) return { ok: false as const, error: "Enquiry not found." };
+  if (enquiry.status === "confirmed") return { ok: false as const, error: "A confirmed event cannot be moved to review from this form." };
+  enquiry.status = action === "decline" ? "declined" : "review";
+  audit(action === "decline" ? "enquiry.decline" : "enquiry.review", "event", enquiry.reference, actor);
+  return { ok: true as const, enquiry };
+}
+
+export function recordRefund(input: { paymentId: string; amountMinor: number; reason: string; actor: string }) {
+  const payment = db().payments.find((p) => p.paymentId === input.paymentId || p.id === input.paymentId || p.orderId === input.paymentId);
+  if (!payment) return { ok: false as const, error: "Payment not found." };
+  if (payment.status !== "captured" && payment.status !== "exception") {
+    return { ok: false as const, error: "Only verified captured or exception payments can enter the refund record." };
+  }
+  const refund = {
+    id: crypto.randomUUID(),
+    paymentId: payment.id,
+    amountMinor: input.amountMinor,
+    reason: input.reason,
+    actor: input.actor,
+    createdAt: nowIso(),
+    status: "recorded" as const,
+  };
+  db().refunds.push(refund);
+  db().exceptions.push({
+    id: crypto.randomUUID(),
+    code: "REFUND_RECORDED",
+    detail: `Refund ${refund.id} recorded for payment ${payment.orderId ?? payment.id}. Gateway execution is separate and not claimed here.`,
+    createdAt: nowIso(),
+  });
+  audit("refund.record", "payment", payment.id, input.actor);
+  return { ok: true as const, refund, notice: "Refund recorded for operations. This does not mark Razorpay as refunded until the gateway confirms it." };
+}
+
+export function addOperationsNote(input: { date: string; kind: string; note: string; actor?: string }) {
+  const row = { id: crypto.randomUUID(), ...input };
+  db().operationsNotes.push(row);
+  audit("ops.note", "operations", row.id, input.actor);
+  return row;
+}
+
+export function recordOfflinePayment(input: { reference: string; amountMinor: number; method: string; note: string; actor: string }) {
+  const stay = db().stays.find((s) => s.reference === input.reference);
+  const quote = db().quotes.find((q) => q.reference === input.reference);
+  if (!stay && !quote) return { ok: false as const, error: "Unknown stay or quote reference." };
+  const row = { id: crypto.randomUUID(), ...input, createdAt: nowIso() };
+  db().offlinePayments.push(row);
+  audit("payment.offline", "payment", input.reference, input.actor);
+  return { ok: true as const, payment: row, notice: "Offline payment logged. This does not mark Razorpay captured or confirm inventory." };
+}
+
+export function saveEventTemplate(input: { name: string; notes: string; depositBps: number | null }, actor?: string) {
+  const row = { id: crypto.randomUUID(), ...input };
+  db().eventTemplates.push(row);
+  audit("template.event", "pricing", row.id, actor);
+  return row;
+}
+
+export function saveNotificationTemplate(input: { id?: string; name: string; subject: string; body: string }, actor?: string) {
+  const existing = input.id ? db().notificationTemplates.find((t) => t.id === input.id) : undefined;
+  if (existing) {
+    existing.name = input.name;
+    existing.subject = input.subject;
+    existing.body = input.body;
+    audit("template.notify", "notifications", existing.id, actor);
+    return existing;
+  }
+  const row = { id: crypto.randomUUID(), name: input.name, subject: input.subject, body: input.body };
+  db().notificationTemplates.push(row);
+  audit("template.notify", "notifications", row.id, actor);
+  return row;
+}
+
+export function saveFaqDraft(input: { q: string; a: string; published: boolean }, actor?: string) {
+  db().faqDrafts.push(input);
+  audit("faq.draft", "cms", input.q, actor);
+  return db().faqDrafts;
+}
+
+export function updateMapZone(id: string, patch: Partial<MapZone>, actor?: string) {
+  const zone = db().mapZones.find((z) => z.id === id);
+  if (!zone) return { ok: false as const, error: "Unknown map zone." };
+  Object.assign(zone, patch);
+  audit("map.update", "map", id, actor);
+  return { ok: true as const, zone };
 }

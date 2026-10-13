@@ -207,4 +207,30 @@ describe("pricing unpublished by default", () => {
     expect(quote.available).toBe(false);
     expect(quote.reason).toMatch(/capacity/i);
   });
+
+  it("G14 prices each night from the matching seasonal exception", () => {
+    const quote = quoteStay({
+      checkIn: "2026-12-24",
+      checkOut: "2026-12-26",
+      guests: 2,
+      bookingEnabled: true,
+      ratePlan: {
+        currency: "INR",
+        weekdayMinor: 1_000_000,
+        weekendMinor: 1_000_000,
+        published: true,
+        minNights: 1,
+        maxNights: 14,
+        maxGuests: 12,
+        taxBps: 0,
+        depositBps: 10000,
+        weekendWeekdays: [0, 6],
+      },
+      exceptions: [{ startDate: "2026-12-25", endDate: "2026-12-25", nightlyMinor: 3_000_000 }],
+    });
+    expect(quote.nightly[0].amountMinor).toBe(1_000_000);
+    expect(quote.nightly[1].kind).toBe("seasonal");
+    expect(quote.nightly[1].amountMinor).toBe(3_000_000);
+    expect(quote.totalMinor).toBe(4_000_000);
+  });
 });

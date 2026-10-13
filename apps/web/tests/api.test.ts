@@ -12,6 +12,9 @@ import {
   preparePayment,
   rememberWebhook,
   markPaymentFailed,
+  acceptQuote,
+  issueQuote,
+  addMaintenance,
 } from "../src/lib/store";
 
 function publishTestRates() {
@@ -248,5 +251,138 @@ describe("reservation service", () => {
     await attachOrder({ stayReference: first.booking.reference, orderId: "order_old", amountMinor: 1 });
     const result = await confirmVerifiedPayment({ orderId: "order_old", paymentId: "pay_old" });
     expect(result.status).toBe("paid_unbooked");
+  });
+
+  it("P01 confirms a stay after verified capture on an active hold", async () => {
+    const hold = await createStayHold({
+      checkIn: "2026-11-20",
+      checkOut: "2026-11-22",
+      guests: 2,
+      fullName: "A",
+      email: "a@example.com",
+      phone: "1111111111",
+      acceptPolicies: true,
+    });
+    expect(hold.ok).toBe(true);
+    if (!hold.ok) return;
+    await attachOrder({ stayReference: hold.booking.reference, orderId: "order_ok", amountMinor: 2_000_000 });
+    const result = await confirmVerifiedPayment({ orderId: "order_ok", paymentId: "pay_ok" });
+    expect(result.status).toBe("confirmed");
+    expect(db().stays[0].status).toBe("confirmed");
+    expect(db().payments[0].status).toBe("captured");
+  });
+
+  it("P05 ignores a later failure after capture", async () => {
+    const hold = await createStayHold({
+      checkIn: "2026-11-20",
+      checkOut: "2026-11-22",
+      guests: 2,
+      fullName: "A",
+      email: "a@example.com",
+      phone: "1111111111",
+      acceptPolicies: true,
+    });
+    expect(hold.ok).toBe(true);
+    if (!hold.ok) return;
+    await attachOrder({ stayReference: hold.booking.reference, orderId: "order_ord", amountMinor: 2_000_000 });
+    await confirmVerifiedPayment({ orderId: "order_ord", paymentId: "pay_ord" });
+    markPaymentFailed("order_ord", "pay_fail_late");
+    expect(db().payments[0].status).toBe("captured");
+    expect(db().stays[0].status).toBe("confirmed");
+  });
+
+  it("G09 cannot accept an event quote after the dates are taken", async () => {
+    const stay = await createStayHold({
+      checkIn: "2026-11-20",
+      checkOut: "2026-11-22",
+      guests: 2,
+      fullName: "A",
+      email: "a@example.com",
+      phone: "1111111111",
+      acceptPolicies: true,
+    });
+    expect(stay.ok).toBe(true);
+    if (!stay.ok) return;
+    db().stays[0].status = "confirmed";
+    db().holds = [];
+    const enquiry = await createEventEnquiry({
+      fullName: "Organiser",
+      email: "org@example.com",
+      phone: "8888888888",
+      eventType: "Gathering",
+      startDate: "2026-11-21",
+      endDate: "2026-11-21",
+    });
+    const issued = await issueQuote({
+      enquiryReference: enquiry.reference,
+      lineItems: [{ label: "Estate day", amountMinor: 100000 }],
+      dueNowMinor: 100000,
+    });
+    expect(issued.ok).toBe(true);
+    if (!issued.ok) return;
+    const accepted = await acceptQuote(issued.quote.reference, "org@example.com", "8888888888");
+    expect(accepted.ok).toBe(false);
+  });
+
+  it("G13 published maintenance blocks a stay hold", async () => {
+    const closed = await addMaintenance("2026-11-20", "2026-11-21", "turnover", "owner");
+    expect(closed.ok).toBe(true);
+    const hold = await createStayHold({
+      checkIn: "2026-11-20",
+      checkOut: "2026-11-22",
+      guests: 2,
+      fullName: "A",
+      email: "a@example.com",
+      phone: "1111111111",
+      acceptPolicies: true,
+    });
+    expect(hold.ok).toBe(false);
+  });
+
+  it("A04 keeps the accepted stay snapshot after rates are republished", async () => {
+    const hold = await createStayHold({
+      checkIn: "2026-11-20",
+      checkOut: "2026-11-22",
+      guests: 2,
+      fullName: "A",
+      email: "a@example.com",
+      phone: "1111111111",
+      acceptPolicies: true,
+    });
+    expect(hold.ok).toBe(true);
+    if (!hold.ok) return;
+    const original = hold.quote.totalMinor;
+    db().settings.draft.weekdayMinor = 9_000_000;
+    db().settings.draft.weekendMinor = 9_000_000;
+    const published = publishStayConfig("owner");
+    expect(published.ok).toBe(true);
+    const stay = db().stays.find((s) => s.reference === hold.booking.reference);
+    expect(stay?.priceSnapshot.totalMinor).toBe(original);
+  });
+
+  it("releases an expired event hold and refuses payment on it", async () => {
+    const enquiry = await createEventEnquiry({
+      fullName: "Organiser",
+      email: "org@example.com",
+      phone: "8888888888",
+      eventType: "Gathering",
+      startDate: "2026-12-10",
+      endDate: "2026-12-10",
+    });
+    const issued = await issueQuote({
+      enquiryReference: enquiry.reference,
+      lineItems: [{ label: "Estate day", amountMinor: 100000 }],
+      dueNowMinor: 100000,
+    });
+    expect(issued.ok).toBe(true);
+    if (!issued.ok) return;
+    const accepted = await acceptQuote(issued.quote.reference, "org@example.com", "8888888888");
+    expect(accepted.ok).toBe(true);
+    db().holds[0].expiresAt = new Date(Date.now() - 1000).toISOString();
+    const prepared = preparePayment({ quoteReference: issued.quote.reference });
+    expect(prepared.ok).toBe(false);
+    expect(db().quotes[0].status).toBe("issued");
+    const search = await searchAvailability({ product: "stay", startDate: "2026-12-10", endDate: "2026-12-12" });
+    expect(search.available).toBe(true);
   });
 });

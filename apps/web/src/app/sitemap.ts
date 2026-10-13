@@ -18,6 +18,7 @@ export default function sitemap(): MetadataRoute.Sitemap {
     "/terms",
     "/cancellation-policy",
     "/event-terms",
+    "/legal",
     "/booking",
     ...ROOMS.map((room) => `/rooms/${room.slug}`),
   ];

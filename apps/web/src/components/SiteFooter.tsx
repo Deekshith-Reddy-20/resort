@@ -56,6 +56,9 @@ export function SiteFooter() {
               <Link href="/cancellation-policy">Cancellation</Link>
             </li>
             <li>
+              <Link href="/legal">Legal</Link>
+            </li>
+            <li>
               <Link href="/privacy">Privacy</Link>
             </li>
             <li>

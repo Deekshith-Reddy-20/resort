@@ -4,7 +4,7 @@ test("homepage loads cinematic brand and no room checkout", async ({ page }) => 
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "V-FARMS", exact: true })).toBeVisible();
   await expect(page.getByText("A singular escape to nature.")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Plan Your Stay" }).first()).toBeVisible();
+  await expect(page.getByRole("link", { name: "Book Entire Resort" }).first()).toBeVisible();
   await expect(page.getByText("Book this room", { exact: false })).toHaveCount(0);
 });
 
