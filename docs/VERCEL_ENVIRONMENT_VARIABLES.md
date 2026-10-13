@@ -1,18 +1,30 @@
 # Vercel environment variables
 
-Set these in **Vercel → Project → Settings → Environment Variables**. After any change, **redeploy** (env vars are injected at build/runtime for the next deployment). Existing deployments keep the old values until you redeploy.
+Set these in **Vercel → Project → Settings → Environment Variables**. After any change, **redeploy with a new build**. `NEXT_PUBLIC_*` values are baked in at build time. Do not use “Redeploy with existing build.”
 
 Never paste real secrets into git, this file, or chat logs.
 
-Use **Preview** and **Production** for everything listed as required on the host. Do not copy local `STAFF_DEV_*` onto Production.
+## What was wrong on `resort`
 
-## How to add them
+The Vercel Supabase integration created keys named `v_farm_resort_*` and `NEXT_PUBLIC_v_farm_resort_*`. The app reads `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and `SUPABASE_SERVICE_ROLE_KEY`.
 
-1. Open the Vercel project that serves `https://resort-delta-nine.vercel.app`.
-2. Settings → Environment Variables.
-3. Add each name below. Mark Production and Preview as specified.
-4. Redeploy the latest git commit (Deployments → ⋮ → Redeploy, or push a new commit).
-5. Confirm the deployment is that commit SHA, not an older Node 20 build.
+The running site therefore reported missing persistence and missing staff auth even though a Supabase project was already linked.
+
+The application now also accepts the integration aliases. You should still copy the values onto the canonical names below so the names match `.env.example`.
+
+`STAFF_SESSION_SECRET`, `DATABASE_MODE=supabase`, `PROPERTY_ID`, and `NEXT_PUBLIC_SITE_URL` were added on Production and Preview. Development passwords were not added.
+
+## How to copy integration keys (dashboard)
+
+1. Open [Vercel → resort → Environment Variables](https://vercel.com/deekshith10/resort/settings/environment-variables).
+2. Find `NEXT_PUBLIC_v_farm_resort_SUPABASE_URL`. Reveal it. Add a **new** variable `NEXT_PUBLIC_SUPABASE_URL` with the same value for Production and Preview.
+3. Copy `NEXT_PUBLIC_v_farm_resort_SUPABASE_ANON_KEY` (or `v_farm_resort_SUPABASE_ANON_KEY`) to `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
+4. Copy `v_farm_resort_SUPABASE_SERVICE_ROLE_KEY` to `SUPABASE_SERVICE_ROLE_KEY` (server-only, never `NEXT_PUBLIC_`).
+5. Confirm `DATABASE_MODE` is `supabase` (not `memory`).
+6. Confirm `STAFF_SESSION_SECRET` exists (long random HMAC key). If you rotate it, every staff session is signed out.
+7. Deployments → ⋮ on the latest git commit → **Redeploy** (do not reuse the old build).
+
+Use **Preview** and **Production**. Do not copy local `STAFF_DEV_*` onto Production.
 
 ## Required for hosted `/admin` (Supabase Auth)
 

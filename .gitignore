@@ -29,3 +29,7 @@ supabase/.temp
 *.ap_
 key.properties
 secrets.properties
+
+.vercel
+.env*
+scripts/.tools

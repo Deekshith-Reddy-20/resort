@@ -2,9 +2,13 @@
 
 Do not put the service-role key in any `NEXT_PUBLIC_*` variable.
 
+A Supabase project is already linked to Vercel as integration variables prefixed `v_farm_resort_`. Those are real credentials. The Next.js app now reads both the canonical names and those aliases.
+
+This workspace **could not apply SQL**. `vercel env pull` redacts secret values to `[SENSITIVE]`, so no live Postgres URL was available here. Apply migrations yourself in the Supabase SQL editor.
+
 ## Project keys
 
-From Supabase → Project Settings → API:
+From Supabase → Project Settings → API (or by copying the Vercel integration values onto these names):
 
 | Variable | Where | Notes |
 |---|---|---|
@@ -23,7 +27,11 @@ In order, from `supabase/migrations/`:
 3. `20261012193000_room_photographs.sql`
 4. `20261013123000_runtime_state.sql` — serverless JSON snapshot (`runtime_state`)
 
-Use the Supabase SQL editor or CLI (`supabase db push`) against **this** project. This workspace did not apply them for you.
+In the Supabase SQL editor, paste each file in order. They are additive (`IF NOT EXISTS` where possible). Do not run a database reset.
+
+Then run `supabase/verify_required_tables.sql`. You should see `admin_profiles`, `inventory_blocks`, `properties`, `runtime_state`, and related booking tables.
+
+This workspace did not apply them for you.
 
 `runtime_state` has RLS enabled and **no public policies**. Guests using the anon key cannot read or write it. The Next.js server uses the service role.
 

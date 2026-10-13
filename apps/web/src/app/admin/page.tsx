@@ -8,6 +8,8 @@ export default function AdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [method, setMethod] = useState<"dev" | "supabase" | "none">("none");
   const [configured, setConfigured] = useState(false);
+  const [missingEnv, setMissingEnv] = useState<string[]>([]);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
 
   useEffect(() => {
     fetch("/api/admin/session")
@@ -15,6 +17,8 @@ export default function AdminPage() {
       .then((data) => {
         setConfigured(Boolean(data.configured));
         setMethod(data.method ?? "none");
+        setMissingEnv(Array.isArray(data.missingEnv) ? data.missingEnv : []);
+        setStatusMessage(typeof data.message === "string" ? data.message : null);
         if (data.authenticated) setAuthed(true);
       })
       .catch(() => undefined);
@@ -42,8 +46,17 @@ export default function AdminPage() {
             ? "Sign in with an authorized Supabase Auth staff account. Roles come from admin_profiles, not from the browser."
             : method === "dev"
               ? "Local development password login is enabled on this machine only."
-              : "Staff authentication is not configured on the server. Hosted sites need STAFF_SESSION_SECRET, Supabase Auth, and an admin_profiles row. Development passwords are not used in production."}
+              : statusMessage ?? "Staff authentication is not configured on the server. Hosted sites need STAFF_SESSION_SECRET, Supabase Auth, and an admin_profiles row. Development passwords are not used in production."}
         </p>
+        {missingEnv.length ? (
+          <ul className="mt-3 list-disc pl-5 text-sm text-forest">
+            {missingEnv.map((name) => (
+              <li key={name}>
+                <code>{name}</code>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <form onSubmit={login} className="mt-6 space-y-3">
           <input name="email" type="email" required placeholder="Staff email" className="field" disabled={!configured && method === "none"} />
           <input name="password" type="password" required minLength={8} placeholder="Password" className="field" disabled={!configured && method === "none"} />

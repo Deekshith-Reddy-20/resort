@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { allowDevPasswordLogin, can, staffAuthMethod, staffConfigured } from "../src/lib/staff";
 import { usingSupabaseStore } from "../src/lib/supabase-admin";
+import { missingPersistenceEnv, missingStaffAuthEnv, persistenceMessage } from "../src/lib/hosted-config";
 import { applyRazorpayWebhook, attachOrder, createStayHold, db, publishStayConfig, resetStore } from "../src/lib/store";
 
 const saved: Record<string, string | undefined> = {};
@@ -64,6 +65,49 @@ describe("supabase persistence mode", () => {
     setEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
     setEnv("SUPABASE_SERVICE_ROLE_KEY", "service");
     expect(usingSupabaseStore()).toBe(false);
+  });
+
+  it("lists canonical missing env names without values on Vercel", () => {
+    setEnv("VERCEL", "1");
+    setEnv("DATABASE_MODE", undefined);
+    setEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    setEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "");
+    setEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    setEnv("STAFF_SESSION_SECRET", "");
+    setEnv("v_farm_resort_SUPABASE_URL", "");
+    setEnv("v_farm_resort_SUPABASE_ANON_KEY", "");
+    setEnv("v_farm_resort_SUPABASE_SERVICE_ROLE_KEY", "");
+    setEnv("NEXT_PUBLIC_v_farm_resort_SUPABASE_URL", "");
+    setEnv("NEXT_PUBLIC_v_farm_resort_SUPABASE_ANON_KEY", "");
+    expect(missingStaffAuthEnv()).toEqual([
+      "STAFF_SESSION_SECRET",
+      "NEXT_PUBLIC_SUPABASE_URL",
+      "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+      "SUPABASE_SERVICE_ROLE_KEY",
+    ]);
+    expect(missingPersistenceEnv()).toContain("NEXT_PUBLIC_SUPABASE_URL");
+    expect(persistenceMessage()?.includes("NEXT_PUBLIC_SUPABASE_URL")).toBe(true);
+    expect(persistenceMessage()?.toLowerCase().includes("service_role")).toBe(true);
+  });
+
+  it("does not report a persistence blocker when Vercel has supabase keys and mode", () => {
+    setEnv("VERCEL", "1");
+    setEnv("DATABASE_MODE", "supabase");
+    setEnv("NEXT_PUBLIC_SUPABASE_URL", "https://example.supabase.co");
+    setEnv("SUPABASE_SERVICE_ROLE_KEY", "service");
+    expect(missingPersistenceEnv()).toEqual([]);
+    expect(persistenceMessage()).toBeNull();
+  });
+
+  it("accepts Vercel Supabase integration aliases", () => {
+    setEnv("DATABASE_MODE", "supabase");
+    setEnv("VERCEL", "1");
+    setEnv("NEXT_PUBLIC_SUPABASE_URL", "");
+    setEnv("SUPABASE_SERVICE_ROLE_KEY", "");
+    setEnv("v_farm_resort_SUPABASE_URL", "https://example.supabase.co");
+    setEnv("v_farm_resort_SUPABASE_SERVICE_ROLE_KEY", "service");
+    expect(usingSupabaseStore()).toBe(true);
+    expect(missingPersistenceEnv()).toEqual([]);
   });
 
   it("enables supabase when DATABASE_MODE=supabase and keys exist", () => {

@@ -8,6 +8,7 @@ import {
 import { withLock as mutexLock } from "./mutex";
 import { persistEnabled, pullStore, pushStore, registerStoreIo } from "./persist";
 import { emptyCommercial, stayConfigGaps, type CommercialSettings } from "./commercial";
+import { persistenceMessage } from "./hosted-config";
 import { BRAND, FAQS, GALLERY, POLICIES, ROOMS } from "./content";
 
 const PROPERTY_ID = process.env.PROPERTY_ID ?? "vfarms-hyderabad";
@@ -439,11 +440,8 @@ function ratePlan(): RatePlan {
 
 export function bookingBlockers(): string[] {
   const issues: string[] = [];
-  if (process.env.VERCEL && !persistEnabled()) {
-    issues.push(
-      "Database persistence is not configured on this host. Set NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, apply migrations including runtime_state, then set DATABASE_MODE=supabase.",
-    );
-  }
+  const persistIssue = persistenceMessage();
+  if (persistIssue) issues.push(persistIssue);
   const live = liveCommercial();
   if (!live) {
     issues.push(

@@ -9,6 +9,7 @@ import {
   STAFF_COOKIE,
   STAFF_COOKIE_MAX_AGE,
 } from "@/lib/staff";
+import { missingStaffAuthEnv, staffAuthUnconfiguredMessage } from "@/lib/hosted-config";
 
 const schema = z.object({
   email: z.string().email(),
@@ -43,6 +44,8 @@ export async function GET() {
       authenticated: false,
       configured: staffConfigured(),
       method: staffAuthMethod(),
+      missingEnv: missingStaffAuthEnv(),
+      message: staffConfigured() ? undefined : staffAuthUnconfiguredMessage(),
     });
   }
   return json({

@@ -1,15 +1,33 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
+function firstEnv(...names: string[]) {
+  for (const name of names) {
+    const value = process.env[name]?.trim() || "";
+    if (value && value !== "[SENSITIVE]") return value;
+  }
+  return "";
+}
+
+/**
+ * Canonical names plus the Vercel Supabase integration prefix used on this project.
+ * Never treat a redacted CLI placeholder as a real credential.
+ */
 export function supabaseUrl() {
-  return process.env.NEXT_PUBLIC_SUPABASE_URL?.trim() || "";
+  return firstEnv("NEXT_PUBLIC_SUPABASE_URL", "NEXT_PUBLIC_v_farm_resort_SUPABASE_URL", "v_farm_resort_SUPABASE_URL");
 }
 
 export function supabaseAnonKey() {
-  return process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim() || "";
+  return firstEnv(
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_v_farm_resort_SUPABASE_ANON_KEY",
+    "v_farm_resort_SUPABASE_ANON_KEY",
+    "NEXT_PUBLIC_v_farm_resort_SUPABASE_PUBLISHABLE_KEY",
+    "v_farm_resort_SUPABASE_PUBLISHABLE_KEY",
+  );
 }
 
 export function supabaseServiceKey() {
-  return process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() || "";
+  return firstEnv("SUPABASE_SERVICE_ROLE_KEY", "v_farm_resort_SUPABASE_SERVICE_ROLE_KEY", "v_farm_resort_SUPABASE_SECRET_KEY");
 }
 
 export function supabaseAuthConfigured() {
